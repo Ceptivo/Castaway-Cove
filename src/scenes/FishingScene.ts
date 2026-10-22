@@ -12,6 +12,18 @@ import layout from '../data/generated/fishing-layout.json';
  * line tension > result card. Follows the brief's Fishing section.
  */
 type Phase = 'ready' | 'charging' | 'flying' | 'waiting' | 'bite' | 'reeling' | 'result';
+export type FishingSpot = 'dock' | 'shore';
+
+/**
+ * Where he fishes from. The dock is image 07, the beach image 15; both share
+ * one layout. The dock counts as deeper water. Points are image pixels:
+ * where short and long casts land, where a landed fish comes in, and the
+ * bottom of the water for the perspective scale.
+ */
+const SPOTS = {
+  dock: { image: 'fishing_dock', horizon: layout.horizon, castNear: 1010, castFar: 610, reelEnd: [600, 1060], waterBottom: 1080, rodShift: [0, 0], reach: fishing.dockReachBonus, islandRect: layout.islandRect, skyTop: layout.skyTop },
+  shore: { image: 'fishing_shore', horizon: layout.shore.horizon, castNear: 850, castFar: 585, reelEnd: [600, 880], waterBottom: 960, rodShift: layout.shore.rodOffset, reach: 0, islandRect: layout.shore.islandRect, skyTop: layout.shore.skyTop },
+} as const;
 type Catch = (typeof fishing.catches)[number];
 
 const [IMG_W, IMG_H] = layout.size;
@@ -69,22 +81,34 @@ export class FishingScene extends Phaser.Scene {
   /** True while the float is out on the water (or flying there). */
   private floatOut = false;
   private pulse?: Phaser.Tweens.Tween;
+  private spot: (typeof SPOTS)[FishingSpot] = SPOTS.dock;
+  /** The distant island shows only when there is land out that way. */
+  private landInView = false;
 
   constructor() {
     super('fishing');
   }
 
+  init(data: { spot?: FishingSpot; landInView?: boolean }): void {
+    this.spot = SPOTS[data.spot ?? 'dock'];
+    this.landInView = !!data.landInView;
+  }
+
   create(): void {
     this.phase = 'ready';
     this.card = undefined;
-    this.sky = this.add.rectangle(0, 0, 10, 10, Phaser.Display.Color.GetColor(...(layout.skyTop as [number, number, number]))).setOrigin(0);
+    this.sky = this.add.rectangle(0, 0, 10, 10, Phaser.Display.Color.GetColor(...(this.spot.skyTop as unknown as [number, number, number]))).setOrigin(0);
     this.stage = this.add.container(0, 0);
-    this.stage.add(this.add.image(0, 0, 'fishing_dock').setOrigin(0));
+    this.stage.add(this.add.image(0, 0, this.spot.image).setOrigin(0));
+    if (this.landInView) {
+      const [ix0, , ix1, iy1] = this.spot.islandRect;
+      this.stage.add(this.add.image((ix0 + ix1) / 2, iy1, 'fishing', 'distant_island').setOrigin(0.5, 1));
+    }
     this.line = this.add.graphics();
     this.stage.add(this.line);
 
     const [rx0, ry0, rx1, ry1] = layout.rodBox;
-    const [px, py] = layout.rodPivot;
+    const [px, py] = this.pivot();
     this.rod = this.add.image(px, py, 'fishing', 'rod_hand').setOrigin((px - rx0) / (rx1 - rx0), (py - ry0) / (ry1 - ry0));
     this.stage.add(this.rod);
 
@@ -254,14 +278,15 @@ export class FishingScene extends Phaser.Scene {
     this.cast = this.power;
     const d = this.cast;
     this.from = this.rodTip();
-    this.target = { x: 560 - d * 70 + Phaser.Math.Between(-30, 30), y: 1010 - d * 400 };
+    const sp = this.spot;
+    this.target = { x: 560 - d * 70 + Phaser.Math.Between(-30, 30), y: Phaser.Math.Linear(sp.castNear, sp.castFar, d) };
     this.float.under = 0;
     this.floatOut = true;
     this.setPhase('flying');
   }
 
   private hook(): void {
-    const reach = this.cast + fishing.dockReachBonus;
+    const reach = this.cast + this.spot.reach;
     const pool = fishing.catches.filter((c) => c.minCast <= reach);
     let r = Math.random() * pool.reduce((t, c) => t + c.odds, 0);
     this.fish = pool.find((c) => (r -= c.odds) <= 0) ?? pool[0];
@@ -376,7 +401,7 @@ export class FishingScene extends Phaser.Scene {
     this.tension = Phaser.Math.Clamp(this.tension, 0, 1);
     this.progress = Math.min(1, this.progress);
     // The float comes in toward the dock as he wins line back.
-    const near = { x: 600, y: 1060 };
+    const near = { x: this.spot.reelEnd[0], y: this.spot.reelEnd[1] };
     this.float.x = Phaser.Math.Linear(this.target.x, near.x, this.progress) + shake * 2;
     this.float.y = Phaser.Math.Linear(this.target.y, near.y, this.progress) + Math.sin(this.time.now / 120) * 2;
     if (this.tension >= 1) this.fail('snapped');
@@ -450,9 +475,15 @@ export class FishingScene extends Phaser.Scene {
     this.game.events.emit('fishing-done');
   }
 
+  /** The rod's pivot in this view (the beach view holds it a little further right). */
+  private pivot(): [number, number] {
+    return [layout.rodPivot[0] + this.spot.rodShift[0], layout.rodPivot[1] + this.spot.rodShift[1]];
+  }
+
   private rodTip(): { x: number; y: number } {
-    const [px, py] = layout.rodPivot;
-    const [tx, ty] = layout.rodTip;
+    const [px, py] = this.pivot();
+    const tx = layout.rodTip[0] + this.spot.rodShift[0];
+    const ty = layout.rodTip[1] + this.spot.rodShift[1];
     const a = Phaser.Math.DegToRad(this.rod.angle);
     const dx = tx - px;
     const dy = ty - py;
@@ -468,7 +499,8 @@ export class FishingScene extends Phaser.Scene {
 
   /** Things on the water shrink toward the horizon. */
   private persp(y: number): number {
-    return Phaser.Math.Clamp(Phaser.Math.Linear(0.3, 1, (y - layout.horizon) / (1080 - layout.horizon)), 0.3, 1.1);
+    const { horizon, waterBottom } = this.spot;
+    return Phaser.Math.Clamp(Phaser.Math.Linear(0.3, 1, (y - horizon) / (waterBottom - horizon)), 0.3, 1.1);
   }
 
   private draw(): void {

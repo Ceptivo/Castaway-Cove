@@ -16,7 +16,7 @@ npm run build        # typecheck + production bundle in dist/
 
 `npm run web-page` packs the build into one self-contained page (`dist/castaway-cove.html`) with the code, fonts and images inline. It needs no other files, so it can be shared or published as a link.
 
-Controls: tap or click the ground to walk there. WASD or the arrow keys walk directly. On the dock the hand button turns into **Fish**: hold the big button (or Space) to cast, strike when the float goes under, and hold to reel while keeping the tension out of the red.
+Controls: tap or click the ground to walk there. WASD or the arrow keys walk directly. On the dock or at the water's edge the hand button turns into **Fish**: hold the big button (or Space) to cast, strike when the float goes under, and hold to reel while keeping the tension out of the red.
 
 ## Android
 
@@ -52,6 +52,9 @@ npm run assets
 | `11-cave-entrance.png`, `12-cave-interior.png` | Caves (later milestone) |
 | `13-shark.png` | Sharks (milestone 5) |
 | `14-fish.png` | The 20 fish you can catch, shown on the catch card |
+| `15-fishing-shore-pov.png` | Fishing from the beach (same layout as image 07) |
+
+In both fishing views the distant island is lifted out and kept as its own sprite (`distant_island`). The game shows it only when there is land in that direction; for now there is none, so the horizon is open ocean.
 
 The sand and grass textures are painted by `tools/paint_textures.py` in the brief's palette.
 Art that the images don't cover is listed in [`docs/ASSETS-NEEDED.md`](docs/ASSETS-NEEDED.md).

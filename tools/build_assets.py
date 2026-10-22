@@ -420,7 +420,7 @@ FISHING_UI = {
     "button_big": rounded_rect(229, 1259, 851, 1386, 18),
     "close_x": rounded_rect(957, 30, 1057, 131, 9),
 }
-FISHING_HUD_BOXES = [(10, 10, 275, 460), (288, 44, 793, 278), (798, 178, 1082, 292), (950, 24, 1064, 138)]
+FISHING_HUD_BOXES = [(0, 0, 282, 468), (288, 44, 793, 278), (798, 178, 1082, 292), (950, 24, 1064, 138)]
 FISHING_LINES = [[(640, 352), (649, 352), (604, 840), (596, 840)], [(694, 545), (704, 545), (742, 990), (733, 990)]]
 
 
@@ -490,7 +490,11 @@ def cut_fishing() -> tuple[dict[str, Image.Image], dict]:
             grey[y, face[y] & mid[y]] = np.median(grey[y, side])
     out["button_big"] = Image.fromarray(np.dstack([grey, grey, grey, b[..., 3]]).clip(0, 255).astype(np.uint8), "RGBA")
 
-    # The scene: remove HUD, words, UI, rod, hand and both painted lines.
+    # The scene: lift out the distant island (the game shows one only when
+    # there is land that way), then remove HUD, words, UI, rod, hand and lines.
+    horizon = 568
+    no_island, island, island_rect = lift_island(rgb, (85, 405, 448, 618), horizon, sea=(455, 600), avoid=FISHING_HUD_BOXES)
+    out["distant_island"] = island
     mask = ndi.binary_dilation(rod_mask, iterations=5)
     for x0, y0, x1, y1 in FISHING_HUD_BOXES:
         mask[y0:y1, x0:x1] = True
@@ -500,26 +504,9 @@ def cut_fishing() -> tuple[dict[str, Image.Image], dict]:
     # "POWER" label goes, since the game relabels the bar while reeling.
     mask |= ndi.binary_dilation(polygon_mask((h, w), FISHING_UI["button_big"]), iterations=8)
     mask[1186:1230, 170:288] = True
-    scene = rgb.astype(np.float32).copy()
-    # Sky above the horizon: refill each row from that row's own clear sky.
-    horizon = 568
-    for y in range(horizon):
-        free = ~mask[y]
-        if mask[y].any() and free.sum() > 20:
-            row = scene[y, free]
-            scene[y, mask[y]] = np.median(row, 0)
-    rng = np.random.default_rng(7)
-    sky_mask = mask.copy()
-    sky_mask[horizon:] = False
-    scene[sky_mask] += (rng.random((int(sky_mask.sum()), 1)) - 0.5) * 3
-    # Everything below the horizon is painted in from around it.
-    low = mask.copy()
-    low[:horizon] = False
-    bgr = cv2.cvtColor(np.clip(scene, 0, 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
-    bgr = cv2.inpaint(bgr, low.astype(np.uint8) * 255, 7, cv2.INPAINT_TELEA)
-    scene_img = Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
     os.makedirs(os.path.join(OUT, "fishing"), exist_ok=True)
-    scene_img.save(os.path.join(OUT, "fishing", "dock.jpg"), quality=88)
+    clean_scene(no_island, mask, horizon).save(os.path.join(OUT, "fishing", "dock.jpg"), quality=88)
+    shore = cut_shore(rod_mask)
 
     layout = {
         "size": [w, h],
@@ -527,11 +514,141 @@ def cut_fishing() -> tuple[dict[str, Image.Image], dict]:
         "rodBox": rod_box,
         "rodTip": [647, 343],
         "rodPivot": [850, 1110],
+        "islandRect": island_rect,
+        "shore": shore,
         "skyTop": [int(v) for v in np.median(rgb[0:6, 300:900].reshape(-1, 3), 0)],
         **{name: [int(min(p[0] for p in poly)), int(min(p[1] for p in poly)), int(max(p[0] for p in poly)),
                   int(max(p[1] for p in poly))] for name, poly in FISHING_UI.items()},
     }
     return out, layout
+
+
+def fill_rows(img: np.ndarray, hole: np.ndarray, rows) -> None:
+    """Fill each row's hole by blending between the clear pixels either side
+    of it, so sky gradients and clouds carry straight across."""
+    w = img.shape[1]
+    for y in rows:
+        cols = np.nonzero(hole[y])[0]
+        if not len(cols):
+            continue
+        runs = np.split(cols, np.nonzero(np.diff(cols) > 1)[0] + 1)
+        for r in runs:
+            a, b = r[0] - 1, r[-1] + 1
+            left = img[y, max(0, a - 3) : a + 1].mean(0) if a >= 0 else None
+            right = img[y, b : min(w, b + 4)].mean(0) if b < w else None
+            if left is None:
+                left = right
+            if right is None:
+                right = left
+            t = (np.arange(len(r)) + 1) / (len(r) + 1)
+            img[y, r] = left[None] * (1 - t[:, None]) + right[None] * t[:, None]
+
+
+def lift_island(rgb: np.ndarray, box, horizon: int, sea: tuple[int, int], avoid=()):
+    """Take the distant island out of a fishing view. Returns the view
+    without it, the island as a sprite, and where the sprite sat. Sea rows
+    are refilled from a clear strip of the same rows (sea = its x range),
+    and the sky by blending across from either side. avoid: boxes (the
+    painted HUD) the sky blend must not borrow from."""
+    h, w = rgb.shape[:2]
+    # The island is whatever differs from the open sky or sea on either side
+    # of it in the same row.
+    x0, y0, x1, y1 = box
+    f = rgb.astype(np.float32)
+    land = np.zeros((h, w), bool)
+    for y in range(y0, y1):
+        ref = np.concatenate([f[y, max(0, x0 - 50) : x0], f[y, x1 : min(w, x1 + 50)]])
+        d = np.sqrt(((f[y, x0:x1] - np.median(ref, 0)) ** 2).sum(-1))
+        land[y, x0:x1] = d > 24
+    land = ndi.binary_opening(land, np.ones((2, 2)))
+    land = ndi.binary_fill_holes(ndi.binary_closing(land, np.ones((3, 3)), iterations=2))
+    lab, _ = ndi.label(land)
+    sizes = np.bincount(lab.ravel())
+    sizes[0] = 0
+    land = np.isin(lab, np.nonzero(sizes > 150)[0])
+    rows, cols = np.nonzero(land)
+    rect = [int(cols.min()), int(rows.min()), int(cols.max() + 1), int(rows.max() + 1)]
+    sprite = trim(cutout(rgb, slice(0, h), slice(0, w), land, pad=1))
+    hole = ndi.binary_dilation(land, iterations=4)
+    # Its shadow, reflection and foam on the water just below it.
+    hole[horizon - 2 : y1 + 45, max(0, x0 - 18) : x1 + 18] = True
+    out = rgb.astype(np.float32).copy()
+    s0, s1 = sea
+    span = s1 - s0
+    for y in range(horizon - 2, h):
+        c = np.nonzero(hole[y])[0]
+        if len(c):
+            k = (c - c[0]) % (2 * span)
+            out[y, c] = rgb[y, s0 + np.where(k < span, k, 2 * span - 1 - k)]  # ping-pong across the strip
+    upper = hole.copy()
+    for ax0, ay0, ax1, ay1 in avoid:
+        upper[ay0:ay1, ax0:ax1] = True
+    upper[horizon - 2 :] = False
+    fill_rows(out, upper, range(0, horizon))
+    fuzz = ndi.gaussian_filter(out, (2.5, 0, 0))
+    out[upper] = fuzz[upper]
+    # Soften the seam where the patch meets the painting.
+    edge = ndi.binary_dilation(hole, iterations=3) & ~ndi.binary_erosion(hole, iterations=3)
+    blurred = ndi.gaussian_filter(out, (1.2, 1.2, 0))
+    out[edge] = blurred[edge]
+    return np.clip(out, 0, 255).astype(np.uint8), sprite, rect
+
+
+def clean_scene(rgb: np.ndarray, mask: np.ndarray, horizon: int) -> Image.Image:
+    """Fill a fishing view's masked parts: sky rows from that row's own clear
+    sky, everything below the horizon painted in from around it."""
+    import cv2
+
+    scene = rgb.astype(np.float32).copy()
+    fill_rows(scene, mask, range(horizon))
+    rng = np.random.default_rng(7)
+    sky_mask = mask.copy()
+    sky_mask[horizon:] = False
+    scene[sky_mask] += (rng.random((int(sky_mask.sum()), 1)) - 0.5) * 3
+    low = mask.copy()
+    low[:horizon] = False
+    bgr = cv2.cvtColor(np.clip(scene, 0, 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+    bgr = cv2.inpaint(bgr, low.astype(np.uint8) * 255, 7, cv2.INPAINT_TELEA)
+    return Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
+
+
+# Image 15 (fishing from the beach): same layout as image 07, its own rod.
+SHORE_HUD_RECTS = [(14, 14, 246, 242), (18, 254, 266, 394), (16, 400, 180, 456), (288, 44, 793, 278), (798, 178, 1082, 292), (950, 24, 1064, 138)]
+# Image 15's rod and hand match image 07's, moved this far (found by matching).
+SHORE_ROD_OFFSET = (39, 16)
+SHORE_LINES = [[(684, 358), (693, 358), (646, 998), (634, 998)], [(684, 358), (693, 358), (764, 998), (750, 998)]]
+
+
+def cut_shore(rod_mask: np.ndarray) -> dict:
+    rgb = load_rgb(f"{REF}/15-fishing-shore-pov.png")
+    h, w = rgb.shape[:2]
+    horizon = 537
+    no_island, _, island_rect = lift_island(rgb, (322, 428, 575, 570), horizon, sea=(160, 318), avoid=SHORE_HUD_RECTS)
+    mask = np.zeros((h, w), bool)
+    for x0, y0, x1, y1 in SHORE_HUD_RECTS:
+        mask[y0:y1, x0:x1] = True
+    # Exactly what the game's rod sprite will cover here, and a little more.
+    dx, dy = SHORE_ROD_OFFSET
+    moved = np.zeros((h, w), bool)
+    moved[dy:, dx:] = rod_mask[: h - dy, : w - dx]
+    mask |= ndi.binary_dilation(moved, iterations=9)
+    for poly in SHORE_LINES:
+        mask |= ndi.binary_dilation(polygon_mask((h, w), poly), iterations=2)
+    mask |= ndi.binary_dilation(polygon_mask((h, w), FISHING_UI["button_big"]), iterations=8)
+    mask[1186:1230, 170:288] = True
+    # Above the horizon only open sky is refilled row by row; the palm under
+    # the HUD on the left is painted in from around it instead.
+    palm = np.zeros_like(mask)
+    palm[330:460, 0:300] = mask[330:460, 0:300]
+    scene = clean_scene(no_island, mask & ~palm, horizon)
+    import cv2
+
+    bgr = cv2.cvtColor(np.array(scene), cv2.COLOR_RGB2BGR)
+    bgr = cv2.inpaint(bgr, palm.astype(np.uint8) * 255, 9, cv2.INPAINT_NS)
+    Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)).save(os.path.join(OUT, "fishing", "shore.jpg"), quality=88)
+    # The dock's rod sprite stands in for this view's own, moved to match.
+    sky = [int(v) for v in np.median(rgb[0:6, 300:900].reshape(-1, 3), 0)]
+    return {"horizon": horizon, "islandRect": island_rect, "rodOffset": list(SHORE_ROD_OFFSET), "skyTop": sky}
 
 
 # Image 14, row by row, left to right.
@@ -565,6 +682,174 @@ def cut_fish() -> dict[str, Image.Image]:
     cs.sort(key=lambda c: ((c[0].start + c[0].stop) // 2 // 200, c[1].start))
     assert len(cs) == len(FISH_NAMES), f"expected {len(FISH_NAMES)} fish, found {len(cs)}"
     return {f"fish_{name}": trim(cutout(rgb, ys, xs, ndi.binary_erosion(sub), pad=1)) for name, (ys, xs, sub) in zip(FISH_NAMES, cs)}
+
+
+# Image 05 (the Bag), in its own pixels.
+BAG_TEXT_BOXES = [
+    (118, 156, 275, 202), (118, 556, 280, 600), (258, 818, 330, 886),  # section headers, amount
+    (776, 55, 824, 102), (840, 58, 928, 104), (1296, 58, 1358, 104),  # level, name, coins
+    (1003, 686, 1084, 734), (1159, 686, 1196, 734),  # attack, defence
+    (826, 792, 910, 834), (984, 792, 1066, 834), (1146, 792, 1222, 834), (1316, 792, 1392, 834),  # meters
+    (1438, 455, 1492, 625),  # "STATUS (2)"
+    (936, 58, 978, 102),  # the pencil, redrawn after the name
+]
+BAG_METER_BARS = [(782, 849, 917, 866), (941, 849, 1075, 866), (1097, 849, 1234, 866), (1265, 849, 1400, 866)]
+BAG_ICONS_05 = {
+    "item_sack": (780, 302, 902, 428),
+    "item_cap": (1263, 150, 1396, 282),
+    "item_hoodie": (1263, 302, 1396, 418),
+    "item_pants": (1263, 452, 1396, 580),
+    "item_boots": (1263, 598, 1396, 726),
+    "tab_backpack": (76, 18, 170, 124),
+    "tab_hammer": (420, 28, 500, 110),
+    "icon_attack": (952, 680, 1003, 740),
+    "icon_defence": (1106, 680, 1160, 738),
+    "meter_health": (780, 792, 818, 834),
+    "meter_energy": (946, 786, 984, 836),
+    "meter_water": (1100, 786, 1137, 834),
+    "meter_food": (1262, 786, 1314, 836),
+    "pencil": (938, 60, 976, 100),
+}
+BAG_ICONS_09 = {
+    "item_stone_axe": (60, 252, 288, 498),
+    "item_knife": (352, 258, 556, 498),
+    "item_hammer": (642, 248, 848, 498),
+    "item_fishing_rod": (912, 252, 1152, 502),
+    "mat_wood": (60, 706, 124, 772),
+    "mat_stone": (146, 708, 204, 770),
+    "mat_rope": (226, 706, 292, 774),
+    "mat_hide": (508, 706, 574, 772),
+    "mat_scrap": (1220, 708, 1284, 772),
+}
+
+
+def outline_cut(rgb: np.ndarray, box: tuple[int, int, int, int], dark: float = 50) -> Image.Image:
+    """An icon inside a box: everything its dark outline encloses, keeping
+    the parts that reach the middle of the box."""
+    x0, y0, x1, y1 = box
+    sub = rgb[y0:y1, x0:x1]
+    m = luminance(sub.astype(np.float32)) < dark
+    m = ndi.binary_closing(m, np.ones((3, 3)), iterations=2)
+    m = ndi.binary_opening(ndi.binary_fill_holes(m), np.ones((3, 3)))
+    lab, n = ndi.label(m)
+    sizes = np.bincount(lab.ravel())
+    sizes[0] = 0
+    big = sizes.argmax()
+    keep = {big} | {i for i in range(1, n + 1) if sizes[i] > sizes[big] * 0.15}
+    return trim(cutout(rgb, slice(y0, y1), slice(x0, x1), np.isin(lab, list(keep)), pad=1))
+
+
+def panel_cut(rgb: np.ndarray, box: tuple[int, int, int, int]) -> Image.Image:
+    """A whole panel: the largest shape its thick dark outline encloses."""
+    x0, y0, x1, y1 = box
+    sub = rgb[y0:y1, x0:x1]
+    m = ndi.binary_closing(luminance(sub.astype(np.float32)) < 40, np.ones((3, 3)), iterations=2)
+    m = ndi.binary_fill_holes(m)
+    lab, _ = ndi.label(m)
+    sizes = np.bincount(lab.ravel())
+    sizes[0] = 0
+    return cutout(rgb, slice(y0, y1), slice(x0, x1), lab == sizes.argmax(), pad=0)
+
+
+def paper_fill(rgb: np.ndarray, region: tuple[int, int, int, int], patch_box: tuple[int, int, int, int]) -> np.ndarray:
+    """Cover a region with the panel's own paper texture: a clean strip,
+    tiled with soft seams and blended in at the edges."""
+    import cv2
+
+    out = rgb.astype(np.float32).copy()
+    px0, py0, px1, py1 = patch_box
+    patch = out[py0:py1, px0:px1].copy()
+    x0, y0, x1, y1 = region
+    w, h = x1 - x0, y1 - y0
+    ph = patch.shape[0]
+    canvas = np.zeros((h, w, 3), np.float32)
+    weight = np.zeros((h, w, 1), np.float32)
+    ramp = np.minimum(1, np.minimum(np.arange(ph), np.arange(ph)[::-1]) / (ph * 0.3) + 0.05)[:, None, None]
+    tile = cv2.resize(patch, (w, ph))
+    y = -ph // 3
+    while y < h:
+        a, b = max(0, y), min(h, y + ph)
+        if b > a:
+            canvas[a:b] += tile[a - y : b - y] * ramp[a - y : b - y]
+            weight[a:b] += ramp[a - y : b - y]
+        y += int(ph * 0.6)
+    canvas /= np.maximum(weight, 1e-3)
+    mask = np.zeros((h, w), np.float32)
+    mask[10:-10, 10:-10] = 1
+    mask = ndi.gaussian_filter(mask, 5)[..., None]
+    out[y0:y1, x0:x1] = out[y0:y1, x0:x1] * (1 - mask) + canvas * mask
+    return out
+
+
+def cut_bag() -> tuple[dict[str, Image.Image], dict]:
+    import cv2
+
+    rgb = load_rgb(f"{REF}/05-inventory-ui.png")
+    clean = rgb.copy()
+    # The example axe and mallet in the pockets: copy an empty slot over them.
+    empty = rgb[225:357, 358:486].copy()
+    clean[225:357, 78:206] = empty
+    clean[225:357, 218:346] = empty
+    # Words and numbers the game draws live.
+    # The lettering has a dark outline too, so the mask reaches past the light strokes.
+    clean = inpaint(clean, BAG_TEXT_BOXES, lambda sub: ndi.binary_dilation(luminance(sub.astype(np.float32)) > 140, iterations=4))
+    # Meter bars back to empty tracks.
+    track = np.median(rgb[851:864, 1205:1230].reshape(-1, 3), 0)
+    for x0, y0, x1, y1 in BAG_METER_BARS:
+        clean[y0 + 2 : y1 - 2, x0 + 3 : x1 - 3] = track
+    # The example character: paper texture in his place.
+    clean = np.clip(paper_fill(clean, (912, 126, 1254, 668), (912, 600, 1254, 672)), 0, 255).astype(np.uint8)
+
+    out: dict[str, Image.Image] = {}
+    opaque = lambda a: Image.fromarray(np.dstack([a, np.full(a.shape[:2], 255, np.uint8)]).astype(np.uint8), "RGBA")  # noqa: E731
+    paper = (912, 600, 1254, 672)
+    # Plain panel areas the game draws its own content on: the scrolling
+    # list on the left, the Status page on the right, and the bottom bar
+    # without its buttons for the Craft tab.
+    lx0, ly0, lx1, ly1 = 60, 138, 682, 778
+    out["bag_list_bg"] = opaque(paper_fill(clean, (lx0, ly0, lx1, ly1), paper)[ly0:ly1, lx0:lx1])
+    rx0, ry0, rx1, ry1 = 760, 126, 1432, 750
+    out["bag_status_bg"] = opaque(paper_fill(clean, (rx0, ry0, rx1, ry1), paper)[ry0:ry1, rx0:rx1])
+    bar = clean[812:892, 350:584]
+    out["bag_bar_plain"] = opaque(cv2.resize(bar, (636, 112), interpolation=cv2.INTER_CUBIC))
+    out["bag_header"] = opaque(clean[147:209, 68:676])
+    out["bag_left"] = panel_cut(clean, (34, 14, 726, 926))
+    # The right panel with its two side tabs (Loadout and Status) as one piece.
+    out["bag_right"] = panel_cut(clean, (744, 24, 1510, 926))
+    out["bag_close"] = outline_cut(rgb, (1448, 40, 1528, 120), dark=70)
+    out["bag_slot"] = Image.fromarray(np.dstack([empty, np.full(empty.shape[:2], 255, np.uint8)]), "RGBA")
+    eq = rgb[448:584, 773:908]
+    out["bag_equip_empty"] = Image.fromarray(np.dstack([eq, np.full(eq.shape[:2], 255, np.uint8)]), "RGBA")
+    # The same tile without its placeholder emblem.
+    plain = eq.copy()
+    m = np.zeros(plain.shape[:2], np.uint8)
+    m[14:-14, 14:-14] = 255
+    plain = cv2.cvtColor(cv2.inpaint(cv2.cvtColor(plain, cv2.COLOR_RGB2BGR), m, 9, cv2.INPAINT_TELEA), cv2.COLOR_BGR2RGB)
+    plain[14:-14, 14:-14] = ndi.uniform_filter(plain[14:-14, 14:-14].astype(np.float32), (9, 9, 1)).astype(np.uint8)
+    out["bag_equip"] = Image.fromarray(np.dstack([plain, np.full(plain.shape[:2], 255, np.uint8)]), "RGBA")
+    # Buttons from the bottom bar, used again on craft cards.
+    for name, (x0, y0, x1, y1) in {"bag_use": (72, 808, 240, 897), "bag_amount": (252, 812, 337, 891), "bag_bin": (592, 806, 691, 899)}.items():
+        out[name] = outline_cut(clean, (x0, y0, x1, y1), dark=45)
+    for name, box in BAG_ICONS_05.items():
+        if name != "pencil":
+            out[name] = outline_cut(rgb, box)
+    # The pencil is drawn in light lines with no dark outline.
+    x0, y0, x1, y1 = BAG_ICONS_05["pencil"]
+    sub = rgb[y0:y1, x0:x1].astype(np.float32)
+    a = np.clip((luminance(sub) - 95) / 60, 0, 1)
+    out["pencil"] = Image.fromarray(np.dstack([sub, a * 255]).astype(np.uint8), "RGBA")
+    t09 = load_rgb(f"{REF}/09-tools-weapons.png")
+    for name, box in BAG_ICONS_09.items():
+        out[name] = outline_cut(t09, box)
+    layout = {
+        "left": [34, 14],
+        "right": [744, 24],
+        "listBg": [lx0, ly0, lx1, ly1],
+        "statusBg": [rx0, ry0, rx1, ry1],
+        "barPlain": [62, 798, 698, 910],
+        "trackColour": [int(v) for v in track],
+    }
+    return out, layout
 
 
 def pack(frames: dict[str, Image.Image], name: str, max_size: int = 2048, pad: int = 2) -> dict:
@@ -647,8 +932,12 @@ def main() -> None:
     with open(os.path.join(gen, "fishing-layout.json"), "w") as f:
         json.dump(fishing_layout, f, indent=1)
     pack({**fishing, **cut_fish()}, "fishing")
+    bag, bag_layout = cut_bag()
+    with open(os.path.join(gen, "bag-layout.json"), "w") as f:
+        json.dump(bag_layout, f, indent=1)
+    pack(bag, "bag")
     paint_textures.main(os.path.join(OUT, "textures"), REF)
-    for group, frames in (("character", character), ("world", world), ("hud", hud), ("fishing", fishing)):
+    for group, frames in (("character", character), ("world", world), ("hud", hud), ("fishing", fishing), ("bag", bag)):
         print(group)
         for k, v in frames.items():
             print(f"  {k:18s} {v.width}x{v.height}")

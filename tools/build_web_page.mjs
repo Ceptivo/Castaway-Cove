@@ -20,7 +20,7 @@ for (const name of ['character', 'world', 'hud', 'fishing']) {
   for (const t of atlas.textures) t.image = dataUri(join(assetsDir, t.image), t.image.endsWith('.webp') ? 'image/webp' : 'image/png');
   inline[`${name}.json`] = atlas;
 }
-inline['fishing/dock.jpg'] = dataUri(join(assetsDir, 'fishing', 'dock.jpg'), 'image/jpeg');
+for (const v of ['dock', 'shore']) inline[`fishing/${v}.jpg`] = dataUri(join(assetsDir, 'fishing', `${v}.jpg`), 'image/jpeg');
 for (const t of ['sand', 'grass', 'water']) inline[`textures/${t}.png`] = dataUri(join(assetsDir, 'textures', `${t}.png`), 'image/png');
 
 // Styles: keep only the Latin font faces and inline their woff2 files.

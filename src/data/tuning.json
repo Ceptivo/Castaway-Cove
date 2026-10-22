@@ -94,6 +94,11 @@
     "arriveDistance": 6
   },
 
+  "fishing": {
+    "_comment": "How close to the waterline (world units) he must stand to fish from the beach.",
+    "shoreEdge": 60
+  },
+
   "ambience": {
     "waterDriftX": 6,
     "waterDriftY": 3,

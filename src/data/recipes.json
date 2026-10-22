@@ -1,0 +1,16 @@
+{
+  "_comment": "Recipes and starting costs from the brief (Gathering, inventory and crafting). station: hand, workbench or research. blueprint: needs a blueprint first.",
+  "recipes": [
+    { "id": "rope", "makes": "rope", "cost": { "fiber": 3 }, "station": "hand" },
+    { "id": "fishing_rod", "makes": "fishing_rod", "cost": { "wood": 3, "fiber": 3 }, "station": "hand" },
+    { "id": "stone_spear", "makes": "stone_spear", "cost": { "wood": 4, "stone": 3 }, "station": "hand" },
+    { "id": "stone_axe", "makes": "stone_axe", "cost": { "wood": 2, "stone": 2, "rope": 1 }, "station": "hand" },
+    { "id": "throwing_hook", "makes": "throwing_hook", "cost": { "rope": 2, "scrap": 1 }, "station": "hand" },
+    { "id": "torch", "makes": "torch", "cost": { "wood": 1, "fiber": 1, "cloth": 1 }, "station": "hand" },
+    { "id": "knife", "makes": "knife", "cost": { "scrap": 2, "wood": 1 }, "station": "workbench" },
+    { "id": "cooking_pot", "makes": "cooking_pot", "cost": { "scrap": 6 }, "station": "workbench" },
+    { "id": "bigger_backpack", "makes": "bigger_backpack", "cost": { "hide": 2, "rope": 2, "cloth": 1 }, "station": "workbench" },
+    { "id": "bow", "makes": "bow", "cost": { "hardwood": 3, "rope": 2 }, "station": "workbench", "blueprint": true },
+    { "id": "radio", "makes": "radio", "cost": { "scrap": 6, "battery": 2 }, "station": "research", "blueprint": true }
+  ]
+}

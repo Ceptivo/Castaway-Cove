@@ -28,7 +28,7 @@ Draw it like images 03 and 04:
 
 | # | Image | Why |
 | --- | --- | --- |
-| 4 | **Fishing from the beach**: image 07 again, with the dock planks, rope post and crate swapped for sand and wet sand at the water's edge. Same camera, same hand. | The brief lets him fish from the water's edge. Until this exists, fishing only works from the dock. |
+| 4 | **Fishing views without the HUD painted on**: images 07 and 15 again, with no map, bars, coins, goal panel, instruction panel, buttons or close button. | The game draws its own HUD, so the painted one is cut out and the hole painted over. Under image 15's top-left HUD there is a palm crown that can't be recovered and looks smudged. |
 | 5 | **Float and splash**: a red-and-white float on the water, the float twitching, and a splash, in the image 07 style. | The float, line and splash rings are drawn in code for now. |
 | 6 | **Old boot**: one painted boot, like the fish in image 14. | The boot card has no picture. |
 

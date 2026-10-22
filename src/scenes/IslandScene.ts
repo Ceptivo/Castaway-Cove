@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import tuning from '../data/tuning.json';
 import rects from '../data/generated/image06-rects.json';
 import { Player } from '../entities/Player';
+import type { FishingSpot } from './FishingScene';
 import type { HudScene } from './HudScene';
 import { randomSeed, Rng } from '../core/rng';
 import { generateIsland, type IslandData } from '../world/islandGen';
@@ -21,6 +22,7 @@ export class IslandScene extends Phaser.Scene {
   private fpsText?: Phaser.GameObjects.Text;
   private palms: { sprite: Phaser.GameObjects.Sprite; sway: boolean }[] = [];
   private hud!: HudScene;
+  private fishingSpot: FishingSpot | null = null;
 
   constructor() {
     super('island');
@@ -165,11 +167,27 @@ export class IslandScene extends Phaser.Scene {
   }
 
   /** The world pauses while a first-person minigame is open. */
+  /** On the dock, or standing at the water's edge (with a little give so it doesn't flicker). */
+  private updateFishingSpot(): void {
+    if (pointInPolygon(this.player, this.island.dockDeck)) {
+      this.fishingSpot = 'dock';
+      return;
+    }
+    const f = this.island.fields;
+    const i = Math.min(f.w - 1, Math.max(0, Math.floor(this.player.x / f.cell)));
+    const j = Math.min(f.h - 1, Math.max(0, Math.floor(this.player.y / f.cell)));
+    const fromWater = f.coast[j * f.w + i];
+    const edge = tuning.fishing.shoreEdge;
+    if (fromWater < edge || (this.fishingSpot === 'shore' && fromWater < edge + 25)) this.fishingSpot = 'shore';
+    else this.fishingSpot = null;
+  }
+
   private openFishing(): void {
-    if (this.scene.isActive('fishing')) return;
+    if (this.scene.isActive('fishing') || !this.fishingSpot) return;
     this.player.stop();
     this.scene.pause();
-    this.scene.launch('fishing');
+    // No other islands are out at sea yet, so the horizon is open water.
+    this.scene.launch('fishing', { spot: this.fishingSpot, landInView: false });
     this.scene.bringToTop('hud');
     this.hud.setMinigame(true);
   }
@@ -191,7 +209,8 @@ export class IslandScene extends Phaser.Scene {
     };
     this.player.update(dt, dir);
     // Fishing needs deep enough water: for now, from the dock (image 07's view).
-    this.hud.setContext(pointInPolygon(this.player, this.island.dockDeck) ? 'fish' : null);
+    this.updateFishingSpot();
+    this.hud.setContext(this.fishingSpot ? 'fish' : null);
     if (this.fpsText) this.fpsText.setText(`${Math.round(this.game.loop.actualFps)} fps`);
   }
 }
