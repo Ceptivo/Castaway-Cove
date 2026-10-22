@@ -21,6 +21,7 @@ export class BootScene extends Phaser.Scene {
     this.load.setPath('assets/');
     this.load.multiatlas('character', 'character.json');
     this.load.multiatlas('world', 'world.json');
+    this.load.multiatlas('hud', 'hud.json');
     for (const t of ['sand', 'grass', 'water']) this.load.image(`tex_${t}`, `textures/${t}.png`);
   }
 

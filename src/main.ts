@@ -4,10 +4,14 @@ import '@fontsource/nunito/700.css';
 import tuning from './data/tuning.json';
 import { hookPlatform } from './core/platform';
 import { BootScene } from './scenes/BootScene';
+import { HudScene } from './scenes/HudScene';
 import { IslandScene } from './scenes/IslandScene';
 
 const parent = document.getElementById('game')!;
 const dpr = Math.min(window.devicePixelRatio || 1, tuning.view.maxDevicePixelRatio);
+
+// The HUD draws its text on canvas, so the fonts must be ready first.
+await Promise.all(['700 16px Oswald', '700 16px Nunito'].map((f) => document.fonts.load(f).catch(() => undefined)));
 
 // The canvas is drawn at device resolution and shown at CSS size, so the
 // painted art stays sharp on high-density phone screens.
@@ -28,7 +32,7 @@ const game = new Phaser.Game({
   fps: { target: 60 },
   input: { activePointers: 2 },
   disableContextMenu: true,
-  scene: [BootScene, IslandScene],
+  scene: [BootScene, IslandScene, HudScene],
 });
 
 window.addEventListener('resize', () => {
@@ -36,4 +40,5 @@ window.addEventListener('resize', () => {
   game.scale.setZoom(1 / dpr);
 });
 
+game.registry.set('dpr', dpr);
 hookPlatform(game);

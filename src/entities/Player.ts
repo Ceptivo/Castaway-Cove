@@ -37,6 +37,11 @@ export class Player {
     this.applyPose();
   }
 
+  /** The way he faces, in degrees: 0 toward the camera, 90 right, 180 away. */
+  get heading(): number {
+    return this.facing;
+  }
+
   get moving(): boolean {
     return this.path.length > 0;
   }

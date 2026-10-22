@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import tuning from '../data/tuning.json';
 import rects from '../data/generated/image06-rects.json';
 import { Player } from '../entities/Player';
+import type { HudScene } from './HudScene';
 import { randomSeed, Rng } from '../core/rng';
 import { generateIsland, type IslandData } from '../world/islandGen';
 import { addTerrain } from '../world/terrainShader';
@@ -56,7 +57,12 @@ export class IslandScene extends Phaser.Scene {
       s: 'S',
       d: 'D',
     }) as typeof this.keys;
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.player.walkTo({ x: p.worldX, y: p.worldY }));
+    this.scene.launch('hud', { player: this.player, island });
+    const hud = this.scene.get('hud') as HudScene;
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (hud.isOverHud(p.x, p.y)) return;
+      this.player.walkTo({ x: p.worldX, y: p.worldY });
+    });
 
     if (params.has('debug')) this.fpsText = this.add.text(8, 8, '', { fontFamily: 'monospace', fontSize: '24px', color: '#fff' }).setScrollFactor(0).setDepth(1e7);
     // Lets automated screenshots drive the castaway.
