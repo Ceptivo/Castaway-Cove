@@ -18,11 +18,15 @@ export class BootScene extends Phaser.Scene {
       .setOrigin(0.5);
     this.load.on('progress', (p: number) => label.setText(`LOADING ${Math.round(p * 100)}%`));
 
-    this.load.setPath('assets/');
-    this.load.multiatlas('character', 'character.json');
-    this.load.multiatlas('world', 'world.json');
-    this.load.multiatlas('hud', 'hud.json');
-    for (const t of ['sand', 'grass', 'water']) this.load.image(`tex_${t}`, `textures/${t}.png`);
+    // A self-contained build (the shareable web page) carries every asset
+    // inline in window.__CASTAWAY_ASSETS; otherwise they load from assets/.
+    const inline = (window as { __CASTAWAY_ASSETS?: Record<string, never> }).__CASTAWAY_ASSETS;
+    const asset = (path: string): string => inline?.[path] ?? path;
+    this.load.setPath(inline ? '' : 'assets/');
+    this.load.multiatlas('character', asset('character.json'));
+    this.load.multiatlas('world', asset('world.json'));
+    this.load.multiatlas('hud', asset('hud.json'));
+    for (const t of ['sand', 'grass', 'water']) this.load.image(`tex_${t}`, asset(`textures/${t}.png`));
   }
 
   create(): void {

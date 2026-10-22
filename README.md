@@ -14,6 +14,8 @@ npm run dev          # http://localhost:5173  (add ?seed=123 for a fixed island,
 npm run build        # typecheck + production bundle in dist/
 ```
 
+`npm run web-page` packs the build into one self-contained page (`dist/castaway-cove.html`) with the code, fonts and images inline. It needs no other files, so it can be shared or published as a link.
+
 Controls: tap or click the ground to walk there. WASD or the arrow keys walk directly.
 
 ## Android

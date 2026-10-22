@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "assets": "python3 tools/build_assets.py",
     "screens": "node tools/screenshots.mjs",
-    "cap:sync": "npm run build && cap sync android"
+    "cap:sync": "npm run build && cap sync android",
+    "web-page": "npm run build && node tools/build_web_page.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

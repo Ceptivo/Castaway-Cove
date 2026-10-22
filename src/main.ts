@@ -10,35 +10,48 @@ import { IslandScene } from './scenes/IslandScene';
 const parent = document.getElementById('game')!;
 const dpr = Math.min(window.devicePixelRatio || 1, tuning.view.maxDevicePixelRatio);
 
-// The HUD draws its text on canvas, so the fonts must be ready first.
-await Promise.all(['700 16px Oswald', '700 16px Nunito'].map((f) => document.fonts.load(f).catch(() => undefined)));
+/** Screen size in CSS pixels; falls back to the window if the page isn't laid out yet. */
+function screenSize(): { w: number; h: number } {
+  return { w: parent.clientWidth || window.innerWidth || 360, h: parent.clientHeight || window.innerHeight || 780 };
+}
 
-// The canvas is drawn at device resolution and shown at CSS size, so the
-// painted art stays sharp on high-density phone screens.
-const game = new Phaser.Game({
-  type: Phaser.WEBGL,
-  parent,
-  backgroundColor: '#2B524C',
-  width: parent.clientWidth * dpr,
-  height: parent.clientHeight * dpr,
-  scale: {
-    mode: Phaser.Scale.NONE,
-    zoom: 1 / dpr,
-  },
-  render: {
-    antialias: true,
-    powerPreference: 'high-performance',
-  },
-  fps: { target: 60 },
-  input: { activePointers: 2 },
-  disableContextMenu: true,
-  scene: [BootScene, IslandScene, HudScene],
-});
+function start(): void {
+  const { w, h } = screenSize();
+  // The canvas is drawn at device resolution and shown at CSS size, so the
+  // painted art stays sharp on high-density phone screens.
+  const game = new Phaser.Game({
+    type: Phaser.WEBGL,
+    parent,
+    backgroundColor: '#2B524C',
+    width: w * dpr,
+    height: h * dpr,
+    scale: {
+      mode: Phaser.Scale.NONE,
+      zoom: 1 / dpr,
+    },
+    render: {
+      antialias: true,
+      powerPreference: 'high-performance',
+    },
+    fps: { target: 60 },
+    input: { activePointers: 2 },
+    disableContextMenu: true,
+    scene: [BootScene, IslandScene, HudScene],
+  });
 
-window.addEventListener('resize', () => {
-  game.scale.resize(parent.clientWidth * dpr, parent.clientHeight * dpr);
-  game.scale.setZoom(1 / dpr);
-});
+  window.addEventListener('resize', () => {
+    const s = screenSize();
+    game.scale.resize(s.w * dpr, s.h * dpr);
+    game.scale.setZoom(1 / dpr);
+  });
 
-game.registry.set('dpr', dpr);
-hookPlatform(game);
+  game.registry.set('dpr', dpr);
+  hookPlatform(game);
+}
+
+// The HUD draws its text on canvas, so give the fonts a moment to arrive
+// first, but never hold the game back if they can't load.
+void Promise.race([
+  Promise.all(['700 16px Oswald', '700 16px Nunito'].map((f) => document.fonts.load(f))).catch(() => undefined),
+  new Promise((resolve) => setTimeout(resolve, 1500)),
+]).then(start);
