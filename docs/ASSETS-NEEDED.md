@@ -24,6 +24,14 @@ Draw it like images 03 and 04:
 | 2 | **Camp props on a flat background** | Hut, supply chest, crate, map sign, barrel, water pot, campfire ring (unlit) and flames (separately), dock, raft with sail, garden with fence. | Today these are cut out of image 06, so some carry bits of grass and water at their edges, most visibly the hut and the sign. A clean sheet fixes that and gives the unlit fire pit the brief needs. |
 | 3 | **Nature sheet** | 4 to 5 rocks of different sizes; rock rubble (gathered rock); berry fern with berries; the same fern with bare stalks (picked); grass tufts; small flowers; 3 pebbles; 2 shells; a starfish. | Rocks, ferns and decals are cut from image 06 and are rough. The fern has no berries, and there is no rubble or bare-stalk art for the "used up" states in milestone 2. |
 
+## Fishing: needed next
+
+| # | Image | Why |
+| --- | --- | --- |
+| 4 | **Fishing from the beach**: image 07 again, with the dock planks, rope post and crate swapped for sand and wet sand at the water's edge. Same camera, same hand. | The brief lets him fish from the water's edge. Until this exists, fishing only works from the dock. |
+| 5 | **Float and splash**: a red-and-white float on the water, the float twitching, and a splash, in the image 07 style. | The float, line and splash rings are drawn in code for now. |
+| 6 | **Old boot**: one painted boot, like the fish in image 14. | The boot card has no picture. |
+
 ## Later milestones (from the brief, in priority order)
 
 - **Action animations:** chop, mine, swing a weapon, eat, drink from a bottle, swim, climb onto the raft.

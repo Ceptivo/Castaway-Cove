@@ -21,6 +21,7 @@ from scipy import ndimage as ndi  # noqa: E402
 from sprite_cut import (  # noqa: E402
     chroma_mask,
     luminance,
+    polygon_mask,
     components,
     cutout,
     load_rgb,
@@ -404,6 +405,168 @@ def clean_minimap(img: Image.Image, clean: np.ndarray) -> Image.Image:
     return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), "RGBA")
 
 
+# Image 07 (first-person fishing off the dock), in its own pixels.
+# The hand, reel and sleeve: a loose outline; the sprite is whatever the
+# painted outline encloses inside it.
+HAND_POLY = [
+    (748, 998), (790, 986), (800, 960), (862, 960), (868, 1000), (905, 1012), (925, 1030), (958, 1100),
+    (972, 1150), (1020, 1168), (1086, 1192), (1086, 1448), (935, 1448), (905, 1330), (888, 1385), (866, 1385),
+    (845, 1300), (838, 1225), (818, 1215), (803, 1190), (793, 1155), (788, 1120), (780, 1100), (765, 1110),
+    (742, 1095), (732, 1060), (736, 1020),
+]
+FISHING_UI = {
+    "panel": rounded_rect(294, 50, 787, 271, 4),
+    "power_bar": rounded_rect(296, 1181, 809, 1234, 12),
+    "button_big": rounded_rect(229, 1259, 851, 1386, 18),
+    "close_x": rounded_rect(957, 30, 1057, 131, 9),
+}
+FISHING_HUD_BOXES = [(10, 10, 275, 460), (288, 44, 793, 278), (798, 178, 1082, 292), (950, 24, 1064, 138)]
+FISHING_LINES = [[(640, 352), (649, 352), (604, 840), (596, 840)], [(694, 545), (704, 545), (742, 990), (733, 990)]]
+
+
+def cut_fishing() -> tuple[dict[str, Image.Image], dict]:
+    """The first-person fishing view from image 07: the rod and hand as one
+    sprite, the UI pieces, and the scene behind them with the painted HUD,
+    words, rod and line taken out."""
+    import cv2
+
+    rgb = load_rgb(f"{REF}/07-fishing-pov.png")
+    h, w = rgb.shape[:2]
+    out: dict[str, Image.Image] = {}
+
+    # The rod: its near-black outline found row by row, then smoothed with a
+    # gentle curve so stray dark water can't make the edges ragged.
+    lum = luminance(rgb.astype(np.float32))
+    ys_, lefts, rights = [], [], []
+    for y in range(352, 930):
+        cx = 647 + 0.2813 * (y - 345)
+        x0 = int(cx - 34)
+        idx = np.nonzero(lum[y, x0 : x0 + 68] < 30)[0]
+        if len(idx) >= 2 and idx[-1] - idx[0] > 8:
+            ys_.append(y)
+            lefts.append(x0 + idx[0])
+            rights.append(x0 + idx[-1])
+    fl, fr = np.polyfit(ys_, lefts, 2), np.polyfit(ys_, rights, 2)
+    yy_ = np.arange(342, 1001, 4)
+    rod_poly = [(np.polyval(fl, y) - 0.5, y) for y in yy_] + [(np.polyval(fr, y) + 1.5, y) for y in yy_[::-1]]
+    rod_mask = polygon_mask((h, w), rod_poly)
+    yy, xx = np.mgrid[0:h, 0:w]
+    rod_mask |= (xx - 647) ** 2 + (yy - 343) ** 2 <= 8.5**2  # rounded tip
+    # The hand, reel and sleeve: the loose outline minus the sea behind them.
+    hand = polygon_mask((h, w), HAND_POLY) & not_sea(rgb)
+    hand = ndi.binary_opening(hand, np.ones((3, 3)))
+    lab, _ = ndi.label(hand)
+    sizes = np.bincount(lab.ravel())
+    sizes[0] = 0
+    rod_mask |= ndi.binary_fill_holes(lab == sizes.argmax())
+    for name in ("power_bar", "button_big"):
+        rod_mask &= ~polygon_mask((h, w), FISHING_UI[name])
+    out["rod_hand"] = cutout(rgb, slice(0, h), slice(0, w), rod_mask, pad=0)
+    rows, cols = np.nonzero(rod_mask)
+    rod_box = [int(cols.min()), int(rows.min()), int(cols.max() + 1), int(rows.max() + 1)]
+    out["rod_hand"] = out["rod_hand"].crop(rod_box)
+
+    # UI pieces.
+    clean_ui = inpaint(rgb, [(312, 66, 770, 256)], lambda sub: luminance(sub.astype(np.float32)) < 120)
+    clean_ui = inpaint(clean_ui, [(380, 1280, 700, 1370)], lambda sub: luminance(sub.astype(np.float32)) > 150)
+    for name, poly in FISHING_UI.items():
+        xs_, ys_ = [p[0] for p in poly], [p[1] for p in poly]
+        box = (int(min(xs_)) - 1, int(min(ys_)) - 1, int(max(xs_)) + 2, int(max(ys_)) + 2)
+        bys, bxs, bm = segment_prop(clean_ui, box=box, poly=poly, mode="poly")
+        out[name] = trim(cutout(clean_ui, bys, bxs, bm, pad=1))
+    # The big button as a grey the game tints: green to cast, orange to strike.
+    b = np.array(out["button_big"]).astype(np.float32)
+    lum = luminance(b[..., :3])
+    face = (b[..., 1] > b[..., 0] + 20) & (b[..., 3] > 200)
+    grey = np.clip(lum / np.percentile(lum[face], 90), 0, 1.15) * 255 / 1.15
+    # Paint out what's left of the words: each row of the face's middle takes
+    # the row's own shade from either side of the lettering.
+    bw = grey.shape[1]
+    mid = np.zeros_like(face)
+    mid[:, int(bw * 0.18) : int(bw * 0.82)] = True
+    for y in range(grey.shape[0]):
+        side = face[y] & ~mid[y]
+        if side.sum() > 10:
+            grey[y, face[y] & mid[y]] = np.median(grey[y, side])
+    out["button_big"] = Image.fromarray(np.dstack([grey, grey, grey, b[..., 3]]).clip(0, 255).astype(np.uint8), "RGBA")
+
+    # The scene: remove HUD, words, UI, rod, hand and both painted lines.
+    mask = ndi.binary_dilation(rod_mask, iterations=5)
+    for x0, y0, x1, y1 in FISHING_HUD_BOXES:
+        mask[y0:y1, x0:x1] = True
+    for poly in FISHING_LINES:
+        mask |= ndi.binary_dilation(polygon_mask((h, w), poly), iterations=2)
+    # The painted power bar stays (the game draws over the same spot); its
+    # "POWER" label goes, since the game relabels the bar while reeling.
+    mask |= ndi.binary_dilation(polygon_mask((h, w), FISHING_UI["button_big"]), iterations=8)
+    mask[1186:1230, 170:288] = True
+    scene = rgb.astype(np.float32).copy()
+    # Sky above the horizon: refill each row from that row's own clear sky.
+    horizon = 568
+    for y in range(horizon):
+        free = ~mask[y]
+        if mask[y].any() and free.sum() > 20:
+            row = scene[y, free]
+            scene[y, mask[y]] = np.median(row, 0)
+    rng = np.random.default_rng(7)
+    sky_mask = mask.copy()
+    sky_mask[horizon:] = False
+    scene[sky_mask] += (rng.random((int(sky_mask.sum()), 1)) - 0.5) * 3
+    # Everything below the horizon is painted in from around it.
+    low = mask.copy()
+    low[:horizon] = False
+    bgr = cv2.cvtColor(np.clip(scene, 0, 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+    bgr = cv2.inpaint(bgr, low.astype(np.uint8) * 255, 7, cv2.INPAINT_TELEA)
+    scene_img = Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
+    os.makedirs(os.path.join(OUT, "fishing"), exist_ok=True)
+    scene_img.save(os.path.join(OUT, "fishing", "dock.jpg"), quality=88)
+
+    layout = {
+        "size": [w, h],
+        "horizon": horizon,
+        "rodBox": rod_box,
+        "rodTip": [647, 343],
+        "rodPivot": [850, 1110],
+        "skyTop": [int(v) for v in np.median(rgb[0:6, 300:900].reshape(-1, 3), 0)],
+        **{name: [int(min(p[0] for p in poly)), int(min(p[1] for p in poly)), int(max(p[0] for p in poly)),
+                  int(max(p[1] for p in poly))] for name, poly in FISHING_UI.items()},
+    }
+    return out, layout
+
+
+# Image 14, row by row, left to right.
+FISH_NAMES = [
+    "sardine", "mackerel", "red_snapper", "yellowfin_tuna",
+    "parrotfish", "clownfish", "sergeant_major", "grouper", "squirrelfish",
+    "lionfish", "pufferfish", "sailfish", "mahi_mahi",
+    "wahoo", "barracuda", "reef_shark",
+    "flounder", "coral_trout", "golden_trevally", "blue_marlin",
+]
+
+
+def cut_fish() -> dict[str, Image.Image]:
+    """The catches from image 14. Its background is a soft colour wash, dark
+    navy in places, so each fish is found by how far it differs from a
+    smooth estimate of that wash."""
+    rgb = load_rgb(f"{REF}/14-fish.png")
+    f = rgb.astype(np.float32)
+    lum = luminance(f)
+    mean = ndi.uniform_filter(lum, 5)
+    std = np.sqrt(np.clip(ndi.uniform_filter(lum * lum, 5) - mean * mean, 0, None))
+    m = ndi.binary_fill_holes(ndi.binary_closing((std > 7) | (lum < 45), np.ones((3, 3)), iterations=3))
+    for _ in range(2):
+        keep = ~ndi.binary_dilation(m, iterations=6)
+        wsum = ndi.gaussian_filter(keep.astype(np.float32), 30) + 1e-3
+        bg = np.stack([ndi.gaussian_filter(f[..., c] * keep, 30) for c in range(3)], -1) / wsum[..., None]
+        m = np.sqrt(((f - bg) ** 2).sum(-1)) > 38
+        m = ndi.binary_closing(m, np.ones((3, 3)), iterations=2)
+        m = ndi.binary_opening(ndi.binary_fill_holes(m), np.ones((5, 5)))
+    cs = components(m, 1500)
+    cs.sort(key=lambda c: ((c[0].start + c[0].stop) // 2 // 200, c[1].start))
+    assert len(cs) == len(FISH_NAMES), f"expected {len(FISH_NAMES)} fish, found {len(cs)}"
+    return {f"fish_{name}": trim(cutout(rgb, ys, xs, ndi.binary_erosion(sub), pad=1)) for name, (ys, xs, sub) in zip(FISH_NAMES, cs)}
+
+
 def pack(frames: dict[str, Image.Image], name: str, max_size: int = 2048, pad: int = 2) -> dict:
     """Shelf-pack frames into one or more pages; write a Phaser multiatlas.
     Empty borders are trimmed off and recorded, so frames keep their size."""
@@ -449,8 +612,10 @@ def pack(frames: dict[str, Image.Image], name: str, max_size: int = 2048, pad: i
                     frame=dict(x=px, y=py, w=w, h=h),
                 )
             )
-        image = f"{name}-{i}.png"
-        sheet.save(os.path.join(OUT, image), optimize=True)
+        # High-quality WebP: a fraction of the PNG's size, which keeps the
+        # self-contained web page well under its size limit.
+        image = f"{name}-{i}.webp"
+        sheet.save(os.path.join(OUT, image), quality=92, alpha_quality=100, method=6)
         textures.append(dict(image=image, format="RGBA8888", size=dict(w=pw, h=ph), scale=1, frames=tframes))
     atlas = dict(textures=textures, meta=dict(app="tools/build_assets.py"))
     with open(os.path.join(OUT, f"{name}.json"), "w") as f:
@@ -478,8 +643,12 @@ def main() -> None:
     pack({**character, **split_legs(character)}, "character")
     pack(world, "world")
     pack(hud, "hud")
+    fishing, fishing_layout = cut_fishing()
+    with open(os.path.join(gen, "fishing-layout.json"), "w") as f:
+        json.dump(fishing_layout, f, indent=1)
+    pack({**fishing, **cut_fish()}, "fishing")
     paint_textures.main(os.path.join(OUT, "textures"), REF)
-    for group, frames in (("character", character), ("world", world), ("hud", hud)):
+    for group, frames in (("character", character), ("world", world), ("hud", hud), ("fishing", fishing)):
         print(group)
         for k, v in frames.items():
             print(f"  {k:18s} {v.width}x{v.height}")

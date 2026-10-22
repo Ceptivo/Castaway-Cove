@@ -6,6 +6,7 @@ import type { HudScene } from './HudScene';
 import { randomSeed, Rng } from '../core/rng';
 import { generateIsland, type IslandData } from '../world/islandGen';
 import { addTerrain } from '../world/terrainShader';
+import { pointInPolygon } from '../world/walkGrid';
 
 const A = tuning.ambience;
 export type Wind = keyof typeof tuning.ambience.palms;
@@ -19,6 +20,7 @@ export class IslandScene extends Phaser.Scene {
   private keys!: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd', Phaser.Input.Keyboard.Key>;
   private fpsText?: Phaser.GameObjects.Text;
   private palms: { sprite: Phaser.GameObjects.Sprite; sway: boolean }[] = [];
+  private hud!: HudScene;
 
   constructor() {
     super('island');
@@ -59,6 +61,17 @@ export class IslandScene extends Phaser.Scene {
     }) as typeof this.keys;
     this.scene.launch('hud', { player: this.player, island });
     const hud = this.scene.get('hud') as HudScene;
+    this.hud = hud;
+    const onContext = (what: string): void => {
+      if (what === 'fish') this.openFishing();
+    };
+    const onFishingDone = (): void => this.closeFishing();
+    this.game.events.on('context', onContext);
+    this.game.events.on('fishing-done', onFishingDone);
+    this.events.once('shutdown', () => {
+      this.game.events.off('context', onContext);
+      this.game.events.off('fishing-done', onFishingDone);
+    });
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (hud.isOverHud(p.x, p.y)) return;
       this.player.walkTo({ x: p.worldX, y: p.worldY });
@@ -151,6 +164,24 @@ export class IslandScene extends Phaser.Scene {
     });
   }
 
+  /** The world pauses while a first-person minigame is open. */
+  private openFishing(): void {
+    if (this.scene.isActive('fishing')) return;
+    this.player.stop();
+    this.scene.pause();
+    this.scene.launch('fishing');
+    this.scene.bringToTop('hud');
+    this.hud.setMinigame(true);
+  }
+
+  private closeFishing(): void {
+    this.scene.stop('fishing');
+    this.hud.setMinigame(false);
+    this.scene.resume();
+    const fish = this.registry.get('rawFish') ?? 0;
+    if (fish) this.hud.showMessage(`Raw fish: ${fish}`);
+  }
+
   update(_time: number, delta: number): void {
     const dt = Math.min(delta, 50) / 1000;
     const k = this.keys;
@@ -159,6 +190,8 @@ export class IslandScene extends Phaser.Scene {
       y: (k.down.isDown || k.s.isDown ? 1 : 0) - (k.up.isDown || k.w.isDown ? 1 : 0),
     };
     this.player.update(dt, dir);
+    // Fishing needs deep enough water: for now, from the dock (image 07's view).
+    this.hud.setContext(pointInPolygon(this.player, this.island.dockDeck) ? 'fish' : null);
     if (this.fpsText) this.fpsText.setText(`${Math.round(this.game.loop.actualFps)} fps`);
   }
 }

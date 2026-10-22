@@ -4,6 +4,7 @@ import '@fontsource/nunito/700.css';
 import tuning from './data/tuning.json';
 import { hookPlatform } from './core/platform';
 import { BootScene } from './scenes/BootScene';
+import { FishingScene } from './scenes/FishingScene';
 import { HudScene } from './scenes/HudScene';
 import { IslandScene } from './scenes/IslandScene';
 
@@ -36,7 +37,7 @@ function start(): void {
     fps: { target: 60 },
     input: { activePointers: 2 },
     disableContextMenu: true,
-    scene: [BootScene, IslandScene, HudScene],
+    scene: [BootScene, IslandScene, FishingScene, HudScene],
   });
 
   window.addEventListener('resize', () => {

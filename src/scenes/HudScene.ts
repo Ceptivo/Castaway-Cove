@@ -40,6 +40,15 @@ export class HudScene extends Phaser.Scene {
   private mapRect = new Phaser.Geom.Rectangle();
   private message?: Phaser.GameObjects.Container;
   private root!: Phaser.GameObjects.Container;
+  /** Where piece() and text() put things; the bottom bar has its own group so a minigame can hide it. */
+  private parent!: Phaser.GameObjects.Container;
+  private bottom!: Phaser.GameObjects.Container;
+  private bottomHits: Phaser.Geom.Rectangle[] = [];
+  private hand!: Phaser.GameObjects.Image;
+  private handLabel!: Phaser.GameObjects.Text;
+  private handPulse?: Phaser.Tweens.Tween;
+  private context: 'fish' | null = null;
+  private inMinigame = false;
 
   constructor() {
     super('hud');
@@ -58,7 +67,34 @@ export class HudScene extends Phaser.Scene {
 
   /** True when a screen point (game pixels) is on a HUD element, so a tap there doesn't walk. */
   isOverHud(x: number, y: number): boolean {
-    return this.hitAreas.some((r) => r.contains(x, y));
+    if (this.hitAreas.some((r) => r.contains(x, y))) return true;
+    return !this.inMinigame && this.bottomHits.some((r) => r.contains(x, y));
+  }
+
+  /** What the hand button does where he stands: 'fish' on the dock, nothing elsewhere. */
+  setContext(ctx: 'fish' | null): void {
+    if (ctx === this.context) return;
+    this.context = ctx;
+    if (ctx === 'fish') this.showMessage('Tap the hand to fish.');
+    this.applyContext();
+  }
+
+  /** A first-person minigame is open: keep the top of the HUD, hide the bottom bar. */
+  setMinigame(on: boolean): void {
+    this.inMinigame = on;
+    this.bottom.setVisible(!on);
+    this.message?.destroy();
+    this.message = undefined;
+  }
+
+  private applyContext(): void {
+    this.handPulse?.stop();
+    this.handPulse = undefined;
+    const base = this.hand.getData('scale') as number;
+    this.hand.setScale(base);
+    const fish = this.context === 'fish';
+    this.handLabel.setVisible(fish);
+    if (fish) this.handPulse = this.tweens.add({ targets: this.hand, scale: base * 1.08, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
 
   showMessage(text: string): void {
@@ -97,9 +133,17 @@ export class HudScene extends Phaser.Scene {
     this.k = Math.min(width / DESIGN_W, height / DESIGN_H);
     this.insets = readInsets(this.registry.get('dpr') ?? 1);
     this.root = this.add.container(0, 0);
+    this.parent = this.root;
     this.buildTopLeft();
     this.buildTopRight();
+    this.bottom = this.add.container(0, 0);
+    this.root.add(this.bottom);
+    this.parent = this.bottom;
+    this.bottomHits = [];
     this.buildBottom();
+    this.parent = this.root;
+    this.bottom.setVisible(!this.inMinigame);
+    this.applyContext();
   }
 
   // Left-anchored and right-anchored points, in game pixels.
@@ -123,7 +167,7 @@ export class HudScene extends Phaser.Scene {
   private piece(frame: string, x: number, y: number, w: number): Phaser.GameObjects.Image {
     const img = this.add.image(x, y, 'hud', frame).setOrigin(0);
     img.setScale((w * this.k) / img.width);
-    this.root.add(img);
+    this.parent.add(img);
     return img;
   }
 
@@ -138,7 +182,7 @@ export class HudScene extends Phaser.Scene {
         strokeThickness: colour === TEXT_LIGHT ? 3 * this.k : 0,
       })
       .setOrigin(...origin);
-    this.root.add(t);
+    this.parent.add(t);
     return t;
   }
 
@@ -151,7 +195,8 @@ export class HudScene extends Phaser.Scene {
       this.tweens.add({ targets: img, scale: base * 0.92, duration: 70, yoyo: true });
       onTap();
     });
-    this.hitAreas.push(img.getBounds());
+    (this.parent === this.bottom ? this.bottomHits : this.hitAreas).push(img.getBounds());
+    img.setData('scale', base);
     return img;
   }
 
@@ -223,7 +268,11 @@ export class HudScene extends Phaser.Scene {
     this.button('button_map', this.R(76), this.B(top), size, () => this.showMessage('The map is coming in a later update.'));
     this.button('button_create', this.R(148), this.B(top), size, () => this.showMessage('Crafting is coming in a later update.'));
     this.button('button_inventory', this.R(220), this.B(top), size, () => this.showMessage('The bag is coming in the next update.'));
-    this.button('button_hand', this.R(DESIGN_W - M - 60), this.B(top + 2), 60, () => this.showMessage('Nothing to use here.'));
+    this.hand = this.button('button_hand', this.R(DESIGN_W - M - 60), this.B(top + 2), 60, () => {
+      if (this.context === 'fish') this.game.events.emit('context', 'fish');
+      else this.showMessage('Nothing to use here.');
+    });
+    this.handLabel = this.text(this.hand.x, this.hand.y + this.hand.displayHeight * 0.3, 'FISH', 14, TEXT_LIGHT, [0.5, 0.5]);
   }
 
   update(): void {

@@ -140,13 +140,14 @@ export class Player {
     this.legR.setFrame(`${frame}_legr`);
 
     // One full cycle is two steps: the left leg lifts on the first half, the
-    // right on the second. Walking sideways the legs also swing, forward
-    // being the way he faces. Units are image-03 pixels (the view is scaled).
+    // right on the second. Walking sideways the legs also swing: a lifted
+    // foot travels from behind him to in front (the way he faces) while the
+    // planted foot pushes back. Units are image-03 pixels (the view is scaled).
     const s = Math.sin(this.stepPhase);
     const c = Math.cos(this.stepPhase);
     const side = Math.sin(Phaser.Math.DegToRad(this.facing));
-    this.legL.setPosition(c * W.legSwing * side, -Math.max(0, s) * W.legLift);
-    this.legR.setPosition(-c * W.legSwing * side, -Math.max(0, -s) * W.legLift);
+    this.legL.setPosition(-c * W.legSwing * side, -Math.max(0, s) * W.legLift);
+    this.legR.setPosition(c * W.legSwing * side, -Math.max(0, -s) * W.legLift);
     this.body.setY(-Math.abs(s) * W.bodyRise);
 
     this.view.setPosition(this.x, this.y).setDepth(this.y);

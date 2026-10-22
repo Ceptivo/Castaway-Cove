@@ -15,11 +15,12 @@ const dataUri = (path, type) => `data:${type};base64,${readFileSync(path).toStri
 
 // Atlases with their page images inlined, and the ground textures.
 const inline = {};
-for (const name of ['character', 'world', 'hud']) {
+for (const name of ['character', 'world', 'hud', 'fishing']) {
   const atlas = JSON.parse(readFileSync(join(assetsDir, `${name}.json`), 'utf8'));
-  for (const t of atlas.textures) t.image = dataUri(join(assetsDir, t.image), 'image/png');
+  for (const t of atlas.textures) t.image = dataUri(join(assetsDir, t.image), t.image.endsWith('.webp') ? 'image/webp' : 'image/png');
   inline[`${name}.json`] = atlas;
 }
+inline['fishing/dock.jpg'] = dataUri(join(assetsDir, 'fishing', 'dock.jpg'), 'image/jpeg');
 for (const t of ['sand', 'grass', 'water']) inline[`textures/${t}.png`] = dataUri(join(assetsDir, 'textures', `${t}.png`), 'image/png');
 
 // Styles: keep only the Latin font faces and inline their woff2 files.

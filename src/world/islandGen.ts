@@ -65,6 +65,8 @@ export interface IslandData {
   objects: PlacedObject[];
   decals: Decal[];
   walk: WalkGrid;
+  /** The dock's walkable deck; fishing from here uses image 07's view. */
+  dockDeck: Vec[];
 }
 
 const I = tuning.island;
@@ -329,6 +331,6 @@ export function generateIsland(seed: number): IslandData {
     y: footOf('campfire').y + campData.playerStart.dy,
   });
 
-  return { seed, size, center, fields, fire, playerStart: start, objects, decals, walk };
+  return { seed, size, center, fields, fire, playerStart: start, objects, decals, walk, dockDeck };
 }
 
