@@ -32,6 +32,16 @@ Draw it like images 03 and 04:
 | 5 | **Float and splash**: a red-and-white float on the water, the float twitching, and a splash, in the image 07 style. | The float, line and splash rings are drawn in code for now. |
 | 6 | **Old boot**: one painted boot, like the fish in image 14. | The boot card has no picture. |
 
+## The Bag: icons still missing
+
+Checked the SURVIVAL folder: images 05 and 09 give icons for wood, stone, rope, hide, scrap, the axe, knife, hammer, fishing rod, sack, backpack and the four clothes. These show as a name on a blank tile until icons exist, painted like those:
+
+| # | Icons | Why |
+| --- | --- | --- |
+| 7 | **Fiber, cloth, hardwood, battery, raw fish (a gutted fish fillet), cooked fish** | Materials and food in the brief with no icon. Raw fish uses the red snapper from image 14 for now. |
+| 8 | **Stone spear, throwing hook, bow and arrows, cooking pot, torch, radio receiver** | Craftable items in the brief with no icon. |
+| 9 | **Status effect icons**: well fed, sheltered, wet, sick, bleeding, poisoned, exhausted | The Status tab lists effects as text only. |
+
 ## Later milestones (from the brief, in priority order)
 
 - **Action animations:** chop, mine, swing a weapon, eat, drink from a bottle, swim, climb onto the raft.

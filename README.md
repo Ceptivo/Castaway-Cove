@@ -16,7 +16,7 @@ npm run build        # typecheck + production bundle in dist/
 
 `npm run web-page` packs the build into one self-contained page (`dist/castaway-cove.html`) with the code, fonts and images inline. It needs no other files, so it can be shared or published as a link.
 
-Controls: tap or click the ground to walk there. WASD or the arrow keys walk directly. On the dock or at the water's edge the hand button turns into **Fish**: hold the big button (or Space) to cast, strike when the float goes under, and hold to reel while keeping the tension out of the red.
+Controls: tap or click the ground to walk there. WASD or the arrow keys walk directly. On the dock or at the water's edge the hand button turns into **Fish**: hold the big button (or Space) to cast, strike when the float goes under, and hold to reel while keeping the tension out of the red. **Inventory** opens the Bag: tap a slot to select it, then Use or Equip, the amount toggle, or the bin (tap twice). The Craft tab lists every recipe from the brief with what you have against what it needs. Items and recipes live in `src/data/items.json` and `src/data/recipes.json`.
 
 ## Android
 
@@ -43,11 +43,11 @@ npm run assets
 | `02-character-turnaround.png` | Character design reference (HUD portrait later) |
 | `03-character-15-angles.png` | The castaway's 15 facing poses. 90°, 150°, 240° and 270° are mirrored, as the brief's facing rule says. |
 | `04-palm-trees.png` | Palms at 8 angles, the sway loop, the trunk stump and coconuts |
-| `05-inventory-ui.png` | The Bag screen (milestone 2) |
+| `05-inventory-ui.png` | The Bag: both panels, slots, buttons, equipment tiles and meter icons, cut out and cleaned so the game fills them live |
 | `06-island-concept.png` | Camp props, rocks, pebbles, starfish, fern, the deep-water tile, and the camp layout |
 | `07-fishing-pov.png` | The fishing screen: the dock scene, his hand on the rod, the panel, power bar and button, cut out and cleaned so the game draws them live |
 | `08-island-hud-mockup.png` | Island HUD mock-up |
-| `09-tools-weapons.png` | Tool and weapon icons |
+| `09-tools-weapons.png` | Tool and material icons in the Bag (axe, knife, hammer, rod; wood, stone, rope, hide, scrap) |
 | `10-rocks.png` | The island's rocks and pebbles (35, in four sizes) |
 | `11-cave-entrance.png`, `12-cave-interior.png` | Caves (later milestone) |
 | `13-shark.png` | Sharks (milestone 5) |

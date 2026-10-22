@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { getInventory } from '../core/inventory';
 import fishing from '../data/fishing.json';
 import layout from '../data/generated/fishing-layout.json';
 
@@ -80,6 +81,8 @@ export class FishingScene extends Phaser.Scene {
   private rodAngle = 0;
   /** True while the float is out on the water (or flying there). */
   private floatOut = false;
+  private lost = 0;
+  private levelledUp = false;
   private pulse?: Phaser.Tweens.Tween;
   private spot: (typeof SPOTS)[FishingSpot] = SPOTS.dock;
   /** The distant island shows only when there is land out that way. */
@@ -416,8 +419,10 @@ export class FishingScene extends Phaser.Scene {
     this.say('landed');
     this.floatOut = false;
     const reg = this.registry;
-    reg.set('rawFish', (reg.get('rawFish') ?? 0) + f.rawFish);
-    reg.set('xp', (reg.get('xp') ?? 0) + f.xp);
+    const inv = getInventory(reg);
+    // Into the bag; whatever doesn't fit goes back in the sea.
+    this.lost = f.rawFish ? inv.add('raw_fish', f.rawFish) : 0;
+    this.levelledUp = inv.gainXp(f.xp);
     reg.set('fishCaught', (reg.get('fishCaught') ?? 0) + (f.id === 'old_boot' ? 0 : 1));
     if (f.id !== 'old_boot') reg.set(`caught_${f.id}`, true);
     this.showCard(f);
@@ -449,7 +454,14 @@ export class FishingScene extends Phaser.Scene {
     card.add(t(30, `${this.kg < 10 ? this.kg.toFixed(1) : Math.round(this.kg)} kg`, 38, 'Nunito'));
     const reward = [f.rawFish ? `+${f.rawFish} Raw fish` : '', `+${f.xp} XP`].filter(Boolean).join('     ');
     card.add(t(84, reward, 36, 'Nunito'));
-    if ('note' in f && f.note) card.add(t(132, f.note, 28, 'Nunito').setAlpha(0.8));
+    const note = this.lost
+      ? `Your bag is full. ${this.lost === f.rawFish ? 'You let it go.' : `${this.lost} didn't fit.`}`
+      : this.levelledUp
+        ? `Level up! You're now level ${getInventory(this.registry).level}.`
+        : 'note' in f && f.note
+          ? f.note
+          : '';
+    if (note) card.add(t(132, note, 28, 'Nunito').setAlpha(0.8));
     card.add(this.add.graphics().lineStyle(3, 0x2a1d12, 0.35).lineBetween(-w / 2 + 50, 172, w / 2 - 50, 172));
     const btn = (x: number, label: string, tint: number, onTap: () => void): void => {
       const b = this.add.image(x, 252, 'fishing', 'button_big').setDisplaySize(280, 96).setTint(tint);

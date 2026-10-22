@@ -15,7 +15,7 @@ const dataUri = (path, type) => `data:${type};base64,${readFileSync(path).toStri
 
 // Atlases with their page images inlined, and the ground textures.
 const inline = {};
-for (const name of ['character', 'world', 'hud', 'fishing']) {
+for (const name of ['character', 'world', 'hud', 'fishing', 'bag']) {
   const atlas = JSON.parse(readFileSync(join(assetsDir, `${name}.json`), 'utf8'));
   for (const t of atlas.textures) t.image = dataUri(join(assetsDir, t.image), t.image.endsWith('.webp') ? 'image/webp' : 'image/png');
   inline[`${name}.json`] = atlas;

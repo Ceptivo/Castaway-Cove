@@ -267,7 +267,7 @@ export class HudScene extends Phaser.Scene {
     const top = DESIGN_H - M - 64;
     this.button('button_map', this.R(76), this.B(top), size, () => this.showMessage('The map is coming in a later update.'));
     this.button('button_create', this.R(148), this.B(top), size, () => this.showMessage('Crafting is coming in a later update.'));
-    this.button('button_inventory', this.R(220), this.B(top), size, () => this.showMessage('The bag is coming in the next update.'));
+    this.button('button_inventory', this.R(220), this.B(top), size, () => this.game.events.emit('open-bag'));
     this.hand = this.button('button_hand', this.R(DESIGN_W - M - 60), this.B(top + 2), 60, () => {
       if (this.context === 'fish') this.game.events.emit('context', 'fish');
       else this.showMessage('Nothing to use here.');

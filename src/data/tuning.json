@@ -73,6 +73,13 @@
     "playerName": "Luke"
   },
 
+  "levels": {
+    "_comment": "Experience for level 2 is firstLevelXp; each level after needs growth times more. Each level adds 1 attack (the brief).",
+    "firstLevelXp": 60,
+    "growth": 1.35,
+    "craftXp": 3
+  },
+
   "player": {
     "walkSpeed": 230,
     "turnSpeedDegPerSec": 540,

@@ -27,6 +27,7 @@ export class BootScene extends Phaser.Scene {
     this.load.multiatlas('world', asset('world.json'));
     this.load.multiatlas('hud', asset('hud.json'));
     this.load.multiatlas('fishing', asset('fishing.json'));
+    this.load.multiatlas('bag', asset('bag.json'));
     this.load.image('fishing_dock', asset('fishing/dock.jpg'));
     this.load.image('fishing_shore', asset('fishing/shore.jpg'));
     for (const t of ['sand', 'grass', 'water']) this.load.image(`tex_${t}`, asset(`textures/${t}.png`));

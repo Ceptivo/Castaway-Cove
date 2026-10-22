@@ -4,6 +4,7 @@ import rects from '../data/generated/image06-rects.json';
 import { Player } from '../entities/Player';
 import type { FishingSpot } from './FishingScene';
 import type { HudScene } from './HudScene';
+import { getInventory } from '../core/inventory';
 import { randomSeed, Rng } from '../core/rng';
 import { generateIsland, type IslandData } from '../world/islandGen';
 import { addTerrain } from '../world/terrainShader';
@@ -68,11 +69,17 @@ export class IslandScene extends Phaser.Scene {
       if (what === 'fish') this.openFishing();
     };
     const onFishingDone = (): void => this.closeFishing();
+    const onOpenBag = (): void => this.openBag();
+    const onBagClosed = (): void => this.closeBag();
     this.game.events.on('context', onContext);
     this.game.events.on('fishing-done', onFishingDone);
+    this.game.events.on('open-bag', onOpenBag);
+    this.game.events.on('bag-closed', onBagClosed);
     this.events.once('shutdown', () => {
       this.game.events.off('context', onContext);
       this.game.events.off('fishing-done', onFishingDone);
+      this.game.events.off('open-bag', onOpenBag);
+      this.game.events.off('bag-closed', onBagClosed);
     });
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (hud.isOverHud(p.x, p.y)) return;
@@ -196,8 +203,22 @@ export class IslandScene extends Phaser.Scene {
     this.scene.stop('fishing');
     this.hud.setMinigame(false);
     this.scene.resume();
-    const fish = this.registry.get('rawFish') ?? 0;
-    if (fish) this.hud.showMessage(`Raw fish: ${fish}`);
+    const fish = getInventory(this.registry).count('raw_fish');
+    if (fish) this.hud.showMessage(`Raw fish in your bag: ${fish}`);
+  }
+
+  /** The Bag covers the screen and pauses the world (the brief). */
+  private openBag(): void {
+    if (this.scene.isActive('bag') || this.scene.isActive('fishing')) return;
+    this.player.stop();
+    this.scene.pause();
+    this.scene.launch('bag');
+    this.scene.bringToTop('bag');
+  }
+
+  private closeBag(): void {
+    this.scene.stop('bag');
+    this.scene.resume();
   }
 
   update(_time: number, delta: number): void {

@@ -693,6 +693,12 @@ BAG_TEXT_BOXES = [
     (1438, 455, 1492, 625),  # "STATUS (2)"
     (936, 58, 978, 102),  # the pencil, redrawn after the name
 ]
+# Equipment slots on the right panel: weapon, tool, backpack, accessory on
+# the left; cap, hoodie, pants, boots on the right.
+BAG_EQUIP_SLOTS = {
+    "weapon": (776, 146, 906, 283), "tool": (776, 299, 906, 435), "backpack": (776, 448, 906, 584), "accessory": (776, 597, 906, 728),
+    "cap": (1260, 146, 1399, 283), "hoodie": (1260, 299, 1399, 435), "pants": (1260, 448, 1399, 584), "boots": (1260, 597, 1399, 728),
+}
 BAG_METER_BARS = [(782, 849, 917, 866), (941, 849, 1075, 866), (1097, 849, 1234, 866), (1265, 849, 1400, 866)]
 BAG_ICONS_05 = {
     "item_sack": (780, 302, 902, 428),
@@ -800,6 +806,10 @@ def cut_bag() -> tuple[dict[str, Image.Image], dict]:
     # The example character: paper texture in his place.
     clean = np.clip(paper_fill(clean, (912, 126, 1254, 668), (912, 600, 1254, 672)), 0, 255).astype(np.uint8)
 
+    # Every equipment slot starts empty; the game draws what he wears.
+    eq_empty = rgb[448:584, 773:908]
+    for x0, y0, x1, y1 in BAG_EQUIP_SLOTS.values():
+        clean[y0:y1, x0:x1] = cv2.resize(eq_empty, (x1 - x0, y1 - y0), interpolation=cv2.INTER_AREA)
     out: dict[str, Image.Image] = {}
     opaque = lambda a: Image.fromarray(np.dstack([a, np.full(a.shape[:2], 255, np.uint8)]).astype(np.uint8), "RGBA")  # noqa: E731
     paper = (912, 600, 1254, 672)
@@ -830,6 +840,9 @@ def cut_bag() -> tuple[dict[str, Image.Image], dict]:
     # Buttons from the bottom bar, used again on craft cards.
     for name, (x0, y0, x1, y1) in {"bag_use": (72, 808, 240, 897), "bag_amount": (252, 812, 337, 891), "bag_bin": (592, 806, 691, 899)}.items():
         out[name] = outline_cut(clean, (x0, y0, x1, y1), dark=45)
+    # The green button without its word, so the game can label it Use, Equip or Craft.
+    blank = inpaint(clean, [(110, 826, 205, 880)], lambda sub: ndi.binary_dilation(luminance(sub.astype(np.float32)) > 140, iterations=3))
+    out["bag_button"] = outline_cut(blank, (72, 808, 240, 897), dark=45)
     for name, box in BAG_ICONS_05.items():
         if name != "pencil":
             out[name] = outline_cut(rgb, box)
@@ -847,6 +860,7 @@ def cut_bag() -> tuple[dict[str, Image.Image], dict]:
         "listBg": [lx0, ly0, lx1, ly1],
         "statusBg": [rx0, ry0, rx1, ry1],
         "barPlain": [62, 798, 698, 910],
+        "equip": {k: list(v) for k, v in BAG_EQUIP_SLOTS.items()},
         "trackColour": [int(v) for v in track],
     }
     return out, layout
