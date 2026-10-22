@@ -54,6 +54,46 @@ def cut_character() -> dict[str, Image.Image]:
     return out
 
 
+def split_legs(poses: dict[str, Image.Image]) -> dict[str, Image.Image]:
+    """Cut every pose into body, left leg and right leg so the game can step
+    the legs in turn until real walk-cycle frames exist. Each part keeps the
+    pose's full canvas, so all three share one origin and line up exactly.
+
+    The legs start just above the crotch (found from the gap between the
+    boots); the body keeps a few rows of overlap so a lifted leg slides up
+    under it instead of opening a seam."""
+    out = {}
+    for name, img in poses.items():
+        a = np.array(img)
+        alpha = a[..., 3] > 128
+        h, w = alpha.shape
+        feet = alpha[int(h * 0.88) :].sum(0)
+        cols = np.nonzero(feet)[0]
+        lo, hi = cols[0], cols[-1]
+        mid = slice(lo + (hi - lo) // 4, hi - (hi - lo) // 4)
+        split_x = mid.start + int(np.argmin(feet[mid]))
+        if feet[split_x] > feet[lo:hi].max() * 0.5:  # boots overlap: split the feet down the middle
+            split_x = (lo + hi) // 2
+        gap = ~alpha[:, max(0, split_x - 1) : split_x + 2].any(1)
+        row = h - 1
+        while row > h * 0.6 and (gap[row] or row > h - 4):
+            row -= 1
+        crotch = row + 1
+        split_y = min(crotch - 6, int(h * 0.78)) if crotch < h - 10 else int(h * 0.74)
+        top = a.copy()
+        top[split_y + 8 :, :, 3] = 0
+        left = a.copy()
+        left[:split_y, :, 3] = 0
+        left[:, split_x:, 3] = 0
+        right = a.copy()
+        right[:split_y, :, 3] = 0
+        right[:, :split_x, 3] = 0
+        out[f"{name}_body"] = Image.fromarray(top, "RGBA")
+        out[f"{name}_legl"] = Image.fromarray(left, "RGBA")
+        out[f"{name}_legr"] = Image.fromarray(right, "RGBA")
+    return out
+
+
 def cut_palms() -> dict[str, Image.Image]:
     rgb = load_rgb(f"{REF}/04-palm-trees.png")
     cs = components(chroma_mask(rgb, (133, 107, 84)), 3000)
@@ -333,6 +373,11 @@ def cut_hud() -> tuple[dict[str, Image.Image], dict]:
     rows, cols = np.nonzero(fill)
     layout = {"barFill": [int(cols.min()), int(rows.min()), int(cols.max() + 1), int(rows.max() + 1)]}
 
+    # Image 08 has no energy bar; its lightning icon comes from image 07's HUD.
+    fp = load_rgb(f"{REF}/07-fishing-pov.png")
+    ys, xs, m = segment_prop(fp, box=(20, 298, 64, 350))
+    out["icon_energy"] = trim(cutout(fp, ys, xs, m, pad=1))
+
     out["minimap"] = clean_minimap(out["minimap"], clean)
     return out, layout
 
@@ -360,8 +405,16 @@ def clean_minimap(img: Image.Image, clean: np.ndarray) -> Image.Image:
 
 
 def pack(frames: dict[str, Image.Image], name: str, max_size: int = 2048, pad: int = 2) -> dict:
-    """Shelf-pack frames into one or more pages; write a Phaser multiatlas."""
-    items = sorted(frames.items(), key=lambda kv: -kv[1].height)
+    """Shelf-pack frames into one or more pages; write a Phaser multiatlas.
+    Empty borders are trimmed off and recorded, so frames keep their size."""
+    sources = {k: v.size for k, v in frames.items()}
+    offsets = {}
+    trimmed = {}
+    for k, v in frames.items():
+        box = v.getchannel("A").getbbox() or (0, 0, 1, 1)
+        offsets[k] = box[:2]
+        trimmed[k] = v.crop(box)
+    items = sorted(trimmed.items(), key=lambda kv: -kv[1].height)
     pages: list[list[tuple[str, int, int, Image.Image]]] = [[]]
     x = y = shelf = 0
     for fname, img in items:
@@ -384,13 +437,15 @@ def pack(frames: dict[str, Image.Image], name: str, max_size: int = 2048, pad: i
         for fname, px, py, img in page:
             sheet.paste(img, (px, py))
             w, h = img.size
+            sw, sh = sources[fname]
+            ox, oy = offsets[fname]
             tframes.append(
                 dict(
                     filename=fname,
                     rotated=False,
-                    trimmed=False,
-                    sourceSize=dict(w=w, h=h),
-                    spriteSourceSize=dict(x=0, y=0, w=w, h=h),
+                    trimmed=(w, h) != (sw, sh),
+                    sourceSize=dict(w=sw, h=sh),
+                    spriteSourceSize=dict(x=ox, y=oy, w=w, h=h),
                     frame=dict(x=px, y=py, w=w, h=h),
                 )
             )
@@ -420,7 +475,7 @@ def main() -> None:
     hud, hud_layout = cut_hud()
     with open(os.path.join(gen, "hud-layout.json"), "w") as f:
         json.dump(hud_layout, f, indent=1)
-    pack(character, "character")
+    pack({**character, **split_legs(character)}, "character")
     pack(world, "world")
     pack(hud, "hud")
     paint_textures.main(os.path.join(OUT, "textures"), REF)

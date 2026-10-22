@@ -19,7 +19,8 @@ const M = 10;
 const TEXT_LIGHT = '#F3E8CF';
 const TEXT_DARK = '#2A1D12';
 const OUTLINE = '#211912';
-const BAR_COLOURS = { health: 0xd63a2c, food: 0xe3a52a, water: 0x3f8fd0 } as const;
+// Health, energy and water from the brief's palette; food keeps image 08's warmer orange.
+const BAR_COLOURS = { health: 0xd63a2c, food: 0xd9772b, water: 0x3f8fd0, energy: 0xe3a52a } as const;
 type Stat = keyof typeof BAR_COLOURS;
 
 interface Bar {
@@ -175,9 +176,10 @@ export class HudScene extends Phaser.Scene {
       ['health', 'icon_health', stats.health],
       ['food', 'icon_food', stats.food],
       ['water', 'icon_water', stats.water],
+      ['energy', 'icon_energy', stats.energy],
     ];
     rows.forEach(([stat, icon, max], i) => {
-      const y = 36 + i * 24;
+      const y = 34 + i * 23;
       const ic = this.piece(icon, 0, 0, 18);
       ic.setPosition(this.L(178) - ic.displayWidth / 2, this.T(y + 10) - ic.displayHeight / 2);
       this.piece('bar_track', this.L(190), this.T(y), 100);
@@ -188,12 +190,12 @@ export class HudScene extends Phaser.Scene {
     });
 
     const pill = this.add.graphics();
-    pill.fillStyle(0x211912, 0.62).fillRoundedRect(this.L(170), this.T(110), 96 * this.k, 26 * this.k, 8 * this.k);
+    pill.fillStyle(0x211912, 0.62).fillRoundedRect(this.L(170), this.T(128), 96 * this.k, 26 * this.k, 8 * this.k);
     this.root.add(pill);
-    const coin = this.piece('icon_coin', this.L(172), this.T(111), 24);
-    coin.setY(this.T(123) - coin.displayHeight / 2);
-    this.text(this.L(201), this.T(123), String(stats.startingCoins), 15, TEXT_LIGHT, [0, 0.5]);
-    this.button('button_plus', this.L(241), this.T(112), 22, () => this.showMessage("The shop isn't open yet."));
+    const coin = this.piece('icon_coin', this.L(172), this.T(129), 24);
+    coin.setY(this.T(141) - coin.displayHeight / 2);
+    this.text(this.L(201), this.T(141), String(stats.startingCoins), 15, TEXT_LIGHT, [0, 0.5]);
+    this.button('button_plus', this.L(241), this.T(130), 22, () => this.showMessage("The shop isn't open yet."));
   }
 
   private buildTopRight(): void {
@@ -201,7 +203,7 @@ export class HudScene extends Phaser.Scene {
 
     // The goal panel: the first goal in the brief's chain.
     const w = 156;
-    const panel = this.piece('quest_panel', this.R(DESIGN_W - M - w), this.T(146), w);
+    const panel = this.piece('quest_panel', this.R(DESIGN_W - M - w), this.T(164), w);
     this.hitAreas.push(panel.getBounds());
     const s = panel.scale / this.k; // points per atlas pixel
     const px = (ax: number): number => panel.x + ax * s * this.k;

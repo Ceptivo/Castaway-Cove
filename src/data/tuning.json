@@ -68,6 +68,7 @@
     "health": 100,
     "food": 100,
     "water": 100,
+    "energy": 100,
     "startingCoins": 0,
     "playerName": "Luke"
   },
@@ -83,8 +84,13 @@
     "backConeDeg": 50,
     "collisionRadius": 20,
     "displayHeight": 150,
-    "bobHeight": 4,
     "stepsPerSecond": 4.2,
+    "walk": {
+      "_comment": "Stepping until walk-cycle art exists, in image-03 pixels (the castaway is about 310 tall there).",
+      "legLift": 14,
+      "legSwing": 7,
+      "bodyRise": 4
+    },
     "arriveDistance": 6
   },
 

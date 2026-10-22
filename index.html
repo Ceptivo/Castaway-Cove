@@ -28,6 +28,21 @@
       #game canvas {
         display: block;
       }
+      /* On wide screens (desktop, landscape) show the game at a portrait
+         phone's shape in the middle; phones in portrait get the full screen. */
+      @media (min-aspect-ratio: 3/4) {
+        html,
+        body {
+          background: #1b3531;
+        }
+        #game {
+          right: 0;
+          left: 0;
+          margin: 0 auto;
+          width: calc(100vh * 360 / 780);
+          box-shadow: 0 0 0 2px #211912, 0 12px 48px rgba(0, 0, 0, 0.55);
+        }
+      }
     </style>
   </head>
   <body>

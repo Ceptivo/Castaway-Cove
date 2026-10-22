@@ -41,7 +41,7 @@ export class IslandScene extends Phaser.Scene {
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, size, size);
-    cam.startFollow(this.player.sprite, true, tuning.view.cameraLerp, tuning.view.cameraLerp);
+    cam.startFollow(this.player.view, true, tuning.view.cameraLerp, tuning.view.cameraLerp);
     this.fitCamera();
     this.scale.on('resize', this.fitCamera, this);
     cam.centerOn(island.playerStart.x, island.playerStart.y);

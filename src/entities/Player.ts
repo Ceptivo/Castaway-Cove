@@ -5,15 +5,25 @@ import type { WalkGrid } from '../world/walkGrid';
 import { headingOf, idleFacing, nearestPose, poseFrame, turnToward, walkFacing } from './facing';
 
 const P = tuning.player;
+const W = tuning.player.walk;
 /** Height of the front pose in image 03; every pose shares this scale. */
 const SOURCE_HEIGHT = 310;
 
 /**
  * The castaway. Taps give him a path to follow; WASD or the arrow keys steer
  * him directly. He turns smoothly through image 03's fifteen poses.
+ *
+ * Each pose is drawn as a body and two legs (split by tools/build_assets.py)
+ * so he can step: the legs lift in turn, swing forward and back when he walks
+ * sideways, and the body rises a little on each step. Real walk-cycle frames
+ * will replace this when the art exists (docs/ASSETS-NEEDED.md).
  */
 export class Player {
-  readonly sprite: Phaser.GameObjects.Sprite;
+  /** The castaway as drawn; the camera follows this. */
+  readonly view: Phaser.GameObjects.Container;
+  private body: Phaser.GameObjects.Image;
+  private legL: Phaser.GameObjects.Image;
+  private legR: Phaser.GameObjects.Image;
   private shadow: Phaser.GameObjects.Image;
   private path: Vec[] = [];
   private facing = 0;
@@ -32,7 +42,11 @@ export class Player {
     this.y = start.y;
     const scale = P.displayHeight / SOURCE_HEIGHT;
     this.shadow = scene.add.image(start.x, start.y, 'soft_shadow').setDisplaySize(96, 30).setAlpha(0.45);
-    this.sprite = scene.add.sprite(start.x, start.y, 'character', poseFrame(0)).setOrigin(0.5, 0.985).setScale(scale);
+    const part = (): Phaser.GameObjects.Image => scene.add.image(0, 0, 'character', `${poseFrame(0)}_body`).setOrigin(0.5, 0.985);
+    this.legR = part();
+    this.legL = part();
+    this.body = part();
+    this.view = scene.add.container(start.x, start.y, [this.legR, this.legL, this.body]).setScale(scale);
     this.facing = this.targetFacing = P.idlePoseRight;
     this.applyPose();
   }
@@ -90,7 +104,7 @@ export class Player {
     } else {
       this.idleFor += dt;
       if (this.idleFor >= P.idleTurnDelay && this.idleFor - dt < P.idleTurnDelay) this.targetFacing = idleFacing(this.facing);
-      // Settle the bob back onto his feet.
+      // Finish the step so both feet come down.
       const s = Math.sin(this.stepPhase);
       if (Math.abs(s) > 0.02) this.stepPhase += dt * P.stepsPerSecond * Math.PI * (s > 0 ? 1 : -1) * 0.5;
       else this.stepPhase = 0;
@@ -120,10 +134,22 @@ export class Player {
   }
 
   private applyPose(): void {
-    const bob = Math.abs(Math.sin(this.stepPhase)) * P.bobHeight;
-    this.sprite.setFrame(poseFrame(nearestPose(this.facing)));
-    this.sprite.setPosition(this.x, this.y - bob);
-    this.sprite.setDepth(this.y);
+    const frame = poseFrame(nearestPose(this.facing));
+    this.body.setFrame(`${frame}_body`);
+    this.legL.setFrame(`${frame}_legl`);
+    this.legR.setFrame(`${frame}_legr`);
+
+    // One full cycle is two steps: the left leg lifts on the first half, the
+    // right on the second. Walking sideways the legs also swing, forward
+    // being the way he faces. Units are image-03 pixels (the view is scaled).
+    const s = Math.sin(this.stepPhase);
+    const c = Math.cos(this.stepPhase);
+    const side = Math.sin(Phaser.Math.DegToRad(this.facing));
+    this.legL.setPosition(c * W.legSwing * side, -Math.max(0, s) * W.legLift);
+    this.legR.setPosition(-c * W.legSwing * side, -Math.max(0, -s) * W.legLift);
+    this.body.setY(-Math.abs(s) * W.bodyRise);
+
+    this.view.setPosition(this.x, this.y).setDepth(this.y);
     this.shadow.setPosition(this.x, this.y - 2).setDepth(this.y - 0.5);
   }
 }
