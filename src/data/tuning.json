@@ -1,0 +1,86 @@
+{
+  "_comment": "Every tuning number lives here. Distances are world units: the castaway is about 150 units tall, and image 06 is drawn at that scale.",
+
+  "view": {
+    "_comment": "How much of the world fits across the short side of the screen. 750 units on a 360pt-wide phone makes the castaway about 72pt tall and the island about four screens wide.",
+    "worldUnitsAcrossShortSide": 750,
+    "maxDevicePixelRatio": 2,
+    "cameraLerp": 0.12
+  },
+
+  "world": {
+    "size": 4400,
+    "_fieldComment": "The island's fields are sampled on a power-of-two grid so the GPU can filter them.",
+    "fieldResolution": 512,
+    "walkCell": 16
+  },
+
+  "island": {
+    "_comment": "The home island: about 20 castaway-heights across.",
+    "radius": 1500,
+    "shapeHarmonics": [0.07, 0.05, 0.035, 0.025],
+    "shapeNoise": 0.06,
+    "coastNoise": 26,
+    "shallowWidth": 170,
+    "wetSandWidth": 34,
+    "beachWidthMin": 150,
+    "beachWidthMax": 300,
+    "grassEdgeNoise": 34,
+    "grassEdgeShadow": 9,
+    "clearings": 10,
+    "clearingRadiusMin": 110,
+    "clearingRadiusMax": 220,
+    "clearingMinCoastDistance": 420,
+    "swimLimitOffshore": 0,
+    "walkMinCoastDistance": 12
+  },
+
+  "camp": {
+    "_comment": "Camp sits on the west coast. The fire is the centre; every other position is an offset from it, measured off image 06.",
+    "fireCoastDistance": 390,
+    "fireNorthOffset": -40,
+    "clearingRadiusX": 470,
+    "clearingRadiusY": 330,
+    "clearingNoise": 40,
+    "pathWidth": 64,
+    "coveRadius": 250,
+    "keepClearRadius": 620
+  },
+
+  "resources": {
+    "palmCoastal": 45,
+    "palmInland": 15,
+    "palmSpacing": 120,
+    "rocks": 25,
+    "rockSpacing": 95,
+    "berryFerns": 35,
+    "fernSpacing": 75,
+    "pebbles": 140,
+    "starfish": 12
+  },
+
+  "player": {
+    "walkSpeed": 230,
+    "turnSpeedDegPerSec": 540,
+    "idleTurnDelay": 0.5,
+    "idlePoseRight": 30,
+    "idlePoseLeft": 330,
+    "sidewaysFrontPoseRight": 60,
+    "sidewaysFrontPoseLeft": 300,
+    "backConeDeg": 50,
+    "collisionRadius": 20,
+    "displayHeight": 150,
+    "bobHeight": 4,
+    "stepsPerSecond": 4.2,
+    "arriveDistance": 6
+  },
+
+  "ambience": {
+    "waterDriftX": 6,
+    "waterDriftY": 3,
+    "foamBreathSeconds": 3.2,
+    "palmSwayFps": 3,
+    "palmRockDeg": 1.2,
+    "fireFlickerMs": 140
+  }
+}

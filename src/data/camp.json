@@ -1,0 +1,21 @@
+{
+  "_comment": "Camp props. Positions come from image 06 (src/data/generated/image06-rects.json) relative to the campfire. Colliders are ellipses at the prop's foot: oy shifts them up the screen (negative = north).",
+  "anchor": "campfire",
+  "playerStart": { "dx": 39, "dy": -121 },
+  "props": [
+    { "frame": "campfire", "collider": { "rx": 56, "ry": 28, "oy": -26 } },
+    { "frame": "hut", "collider": { "rx": 160, "ry": 74, "oy": -80 } },
+    { "frame": "chest", "collider": { "rx": 74, "ry": 32, "oy": -30 } },
+    { "frame": "crate", "collider": { "rx": 40, "ry": 20, "oy": -18 } },
+    { "frame": "map_sign", "collider": { "rx": 50, "ry": 14, "oy": -14 } },
+    { "frame": "barrel", "collider": { "rx": 21, "ry": 11, "oy": -10 } },
+    { "frame": "garden", "collider": { "rx": 214, "ry": 118, "oy": -133 } },
+    { "frame": "dock", "layer": "ground" },
+    { "frame": "raft", "layer": "ground", "floating": true }
+  ],
+  "dockDeck": [
+    [197, 792], [272, 730], [380, 675], [462, 725], [500, 772], [430, 785], [320, 825], [255, 812]
+  ],
+  "_dockDeckComment": "The walkable top of the dock, in image 06 pixels.",
+  "pathTo": [450, 770]
+}
