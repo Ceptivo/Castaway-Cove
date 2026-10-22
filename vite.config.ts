@@ -5,7 +5,7 @@ export default defineConfig({
   // Capacitor Android app.
   base: './',
   build: {
-    target: 'es2020',
+    target: 'es2022',
     assetsInlineLimit: 0,
     chunkSizeWarningLimit: 2000,
   },
