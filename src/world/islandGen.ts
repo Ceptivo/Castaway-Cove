@@ -1,6 +1,7 @@
 import tuning from '../data/tuning.json';
 import campData from '../data/camp.json';
 import rects from '../data/generated/image06-rects.json';
+import rockArt from '../data/generated/rocks.json';
 import { Noise2D } from '../core/noise';
 import { Rng } from '../core/rng';
 import { WalkGrid } from './walkGrid';
@@ -257,21 +258,35 @@ export function generateIsland(seed: number): IslandData {
   }, makePalm);
   scatter(R.palmInland, R.palmSpacing, (x, y) => sample(grass, x, y) > 80, makePalm);
 
-  const rockFrames = ['rock_cluster_a', 'rock_cluster_b', 'rock_small', 'rock_big', 'rock_beach'];
-  scatter(R.rocks, R.rockSpacing, (x, y) => sample(coast, x, y) > 120, (x, y) => {
-    const frame = rng.pick(rockFrames);
-    const [x0, y0, x1, y1] = rects[frame as RectName];
+  // Rocks from image 10, in the brief's count, mixed by size.
+  const rockMix = Object.entries(R.rockMix) as [keyof typeof rockArt, number][];
+  const pickRock = (): { frame: string; w: number; h: number } => {
+    let r = rng.next() * rockMix.reduce((t, [, w]) => t + w, 0);
+    for (const [group, w] of rockMix) {
+      if ((r -= w) <= 0) return rng.pick(rockArt[group]);
+    }
+    return rng.pick(rockArt.rock_small);
+  };
+  for (let made = 0, tries = 0; made < R.rocks && tries < R.rocks * 200; tries++) {
+    const rock = pickRock();
     const s = rng.range(0.9, 1.1);
-    return {
+    const spacing = Math.max(R.rockSpacing, rock.w * s * 0.75);
+    const x = rng.range(center.x - I.radius * 1.3, center.x + I.radius * 1.3);
+    const y = rng.range(center.y - I.radius * 1.3, center.y + I.radius * 1.3);
+    if (keepClear(x, y) || sample(coast, x, y) < 120 + rock.w * 0.3) continue;
+    if (placed.some((p) => Math.hypot(p.x - x, p.y - y) < Math.max(p.r, spacing))) continue;
+    objects.push({
       kind: 'rock',
-      frame,
+      frame: rock.frame,
       x,
       y,
       scale: s,
       flip: rng.chance(0.5),
-      collider: { rx: ((x1 - x0) / 2) * 0.8 * s, ry: ((y1 - y0) / 2) * 0.35 * s, oy: -((y1 - y0) * 0.25 * s) },
-    };
-  });
+      collider: { rx: rock.w * 0.4 * s, ry: rock.h * 0.17 * s, oy: -rock.h * 0.16 * s },
+    });
+    placed.push({ x, y, r: spacing });
+    made++;
+  }
 
   scatter(R.berryFerns, R.fernSpacing, (x, y) => sample(grass, x, y) > 30, (x, y) => ({
     kind: 'fern',
@@ -285,12 +300,13 @@ export function generateIsland(seed: number): IslandData {
 
   // Flat details on the sand and dirt.
   const decals: Decal[] = [];
-  const pebbleFrames = ['pebble_a', 'pebble_b', 'pebble_c'];
+  const pebbleFrames = rockArt.pebble.map((p) => p.frame);
   for (let tries = 0; decals.length < R.pebbles && tries < R.pebbles * 50; tries++) {
     const x = rng.range(center.x - I.radius * 1.3, center.x + I.radius * 1.3);
     const y = rng.range(center.y - I.radius * 1.3, center.y + I.radius * 1.3);
-    if (sample(coast, x, y) < wet + 6 || sample(grass, x, y) > -12) continue;
-    decals.push({ frame: rng.pick(pebbleFrames), x, y, scale: rng.range(0.6, 1), flip: rng.chance(0.5) });
+    if (sample(coast, x, y) < wet + 10) continue;
+    if (objects.some((o) => o.collider && Math.abs(o.x - x) < o.collider.rx + 30 && Math.abs(o.y + o.collider.oy - y) < o.collider.ry + 30)) continue;
+    decals.push({ frame: rng.pick(pebbleFrames), x, y, scale: rng.range(R.pebbleScaleMin, R.pebbleScaleMax), flip: rng.chance(0.5) });
   }
   let starfish = 0;
   for (let tries = 0; starfish < R.starfish && tries < 5000; tries++) {

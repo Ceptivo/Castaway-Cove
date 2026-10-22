@@ -8,6 +8,7 @@ image changes or a new sprite is added below. Requires numpy, scipy, Pillow.
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 
@@ -16,8 +17,10 @@ from PIL import Image, ImageOps
 
 sys.path.insert(0, os.path.dirname(__file__))
 import paint_textures  # noqa: E402
+from scipy import ndimage as ndi  # noqa: E402
 from sprite_cut import (  # noqa: E402
     chroma_mask,
+    luminance,
     components,
     cutout,
     load_rgb,
@@ -146,14 +149,6 @@ PROPS = {
         mode="poly",
         poly=[(600, 680), (600, 658), (612, 630), (626, 606), (638, 618), (652, 640), (662, 662), (658, 682)],
     ),
-    "rock_cluster_a": dict(box=(432, 182, 568, 268), mode="grey"),
-    "rock_cluster_b": dict(box=(198, 245, 310, 325), mode="grey"),
-    "rock_small": dict(box=(160, 405, 215, 455), mode="grey"),
-    "rock_big": dict(box=(1245, 700, 1350, 805), mode="grey"),
-    "rock_beach": dict(box=(1192, 828, 1282, 902), mode="grey"),
-    "pebble_a": dict(box=(544, 491, 572, 513), mode="grey"),
-    "pebble_b": dict(box=(464, 533, 508, 565), mode="grey"),
-    "pebble_c": dict(box=(853, 860, 906, 902), mode="grey"),
     "starfish": dict(
         box=(612, 836, 680, 890),
         mode="poly",
@@ -186,6 +181,182 @@ def cut_props() -> tuple[dict[str, Image.Image], dict[str, list[int]]]:
         rects[name] = [int(xs.start + cols.min()), int(ys.start + rows.min()), int(xs.start + cols.max() + 1),
                        int(ys.start + rows.max() + 1)]
     return out, rects
+
+
+# Image 10's rows, top to bottom, and how much each is scaled to sit at the
+# castaway's size (a big cluster ends up about 1.5 times his width).
+ROCK_ROWS = [("rock_cluster", 0.62), ("rock_cluster", 0.62), ("rock_medium", 0.6), ("rock_small", 0.55), ("pebble", 0.5)]
+
+
+def cut_rocks() -> tuple[dict[str, Image.Image], dict[str, list[dict]]]:
+    """Rocks from image 10. Its background is a smooth blurred gradient as
+    bright as the rocks in places, so rocks are found by their painted
+    texture and outline instead of by colour."""
+    rgb = load_rgb(f"{REF}/10-rocks.png")
+    lum = luminance(rgb.astype(np.float32))
+    mean = ndi.uniform_filter(lum, 5)
+    std = np.sqrt(np.clip(ndi.uniform_filter(lum * lum, 5) - mean * mean, 0, None))
+    m = ndi.binary_closing(std > 6, np.ones((3, 3)), iterations=3)
+    m = ndi.binary_opening(ndi.binary_fill_holes(m), np.ones((5, 5)))
+    cs = components(m, 250)
+    # Group into rows by vertical centre, then left to right.
+    cs.sort(key=lambda c: (c[0].start + c[0].stop) / 2)
+    rows: list[list] = []
+    for c in cs:
+        cy = (c[0].start + c[0].stop) / 2
+        if rows and cy - (rows[-1][-1][0].start + rows[-1][-1][0].stop) / 2 < 70:
+            rows[-1].append(c)
+        else:
+            rows.append([c])
+    assert len(rows) == len(ROCK_ROWS), f"expected {len(ROCK_ROWS)} rows of rocks, found {len(rows)}"
+    out: dict[str, Image.Image] = {}
+    groups: dict[str, list[dict]] = {}
+    counters: dict[str, int] = {}
+    for row, (group, scale) in zip(rows, ROCK_ROWS):
+        for ys, xs, sub in sorted(row, key=lambda c: c[1].start):
+            sub = ndi.binary_erosion(sub, iterations=2)  # shed the background's glow
+            img = trim(cutout(rgb, ys, xs, sub))
+            img = img.resize((max(1, round(img.width * scale)), max(1, round(img.height * scale))), Image.LANCZOS)
+            i = counters.get(group, 0)
+            counters[group] = i + 1
+            name = f"{group}_{i}"
+            out[name] = img
+            groups.setdefault(group, []).append({"frame": name, "w": img.width, "h": img.height})
+    return out, groups
+
+
+def rounded_rect(x0: float, y0: float, x1: float, y1: float, r: float) -> list[tuple[float, float]]:
+    pts = []
+    for cx, cy, a0 in ((x1 - r, y0 + r, -90), (x1 - r, y1 - r, 0), (x0 + r, y1 - r, 90), (x0 + r, y0 + r, 180)):
+        for t in range(0, 91, 10):
+            a = math.radians(a0 + t)
+            pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    return pts
+
+
+def circle(cx: float, cy: float, r: float) -> list[tuple[float, float]]:
+    return [(cx + r * math.cos(math.radians(a)), cy + r * math.sin(math.radians(a))) for a in range(0, 360, 6)]
+
+
+def not_sea(rgb: np.ndarray) -> np.ndarray:
+    """Everything except the teal sea the mock-up's HUD sits on."""
+    f = rgb.astype(np.int16)
+    r, g, b = f[..., 0], f[..., 1], f[..., 2]
+    sea = (np.abs(g - b) < 35) & (g > r + 12) & (luminance(rgb.astype(np.float32)) < 150)
+    return ~sea
+
+
+def inpaint(rgb: np.ndarray, boxes: list[tuple[int, int, int, int]], select) -> np.ndarray:
+    """Paint text out of a panel: pixels chosen by select() inside the boxes
+    are filled from their surroundings."""
+    import cv2
+
+    mask = np.zeros(rgb.shape[:2], np.uint8)
+    for x0, y0, x1, y1 in boxes:
+        sub = select(rgb[y0:y1, x0:x1])
+        mask[y0:y1, x0:x1] |= sub.astype(np.uint8)
+    mask = cv2.dilate(mask, np.ones((5, 5), np.uint8))
+    bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    out = cv2.inpaint(bgr, mask * 255, 5, cv2.INPAINT_TELEA)
+    return cv2.cvtColor(out, cv2.COLOR_BGR2RGB)
+
+
+# HUD pieces from image 08 (the island HUD mock-up), in image-08 pixels.
+HUD_SHAPES = {
+    "minimap": rounded_rect(20, 27, 238, 262, 3),
+    "portrait": circle(301, 77.5, 50),
+    "bar": rounded_rect(400, 66, 563, 99, 6),
+    "settings": rounded_rect(1457, 18, 1517, 78, 6),
+    "quest_panel": rounded_rect(1232, 97, 1521, 215, 4),
+    "button_map": rounded_rect(847, 852, 1001, 993, 11),
+    "button_create": rounded_rect(1032, 852, 1183, 993, 11),
+    "button_inventory": rounded_rect(1212, 852, 1361, 993, 11),
+    "button_hand": circle(1462, 926, 61),
+}
+HUD_ICONS = {
+    "icon_health": (362, 63, 401, 102),
+    "icon_food": (361, 114, 401, 151),
+    "icon_water": (364, 162, 398, 201),
+    "icon_coin": (362, 212, 403, 253),
+    "button_plus": (466, 213, 508, 256),
+}
+
+
+def cut_hud() -> tuple[dict[str, Image.Image], dict]:
+    rgb = load_rgb(f"{REF}/08-island-hud-mockup.png")
+    dark = lambda sub: luminance(sub.astype(np.float32)) < 110  # noqa: E731
+    light = lambda sub: luminance(sub.astype(np.float32)) > 165  # noqa: E731
+    # The quest panel's words and count, and the health bar's numbers.
+    clean = inpaint(rgb, [(1281, 118, 1450, 150), (1244, 168, 1408, 197), (1472, 168, 1508, 197)], dark)
+    clean = inpaint(clean, [(465, 69, 560, 97)], light)
+
+    out: dict[str, Image.Image] = {}
+    for name, poly in HUD_SHAPES.items():
+        xs_, ys_ = [p[0] for p in poly], [p[1] for p in poly]
+        box = (int(min(xs_)) - 1, int(min(ys_)) - 1, int(max(xs_)) + 2, int(max(ys_)) + 2)
+        ys, xs, m = segment_prop(clean, box=box, poly=poly, mode="poly")
+        out[name] = trim(cutout(clean, ys, xs, m, pad=1))
+    for name, box in HUD_ICONS.items():
+        x0, y0, x1, y1 = box
+        sub = rgb[y0:y1, x0:x1]
+        m = ndi.binary_fill_holes(ndi.binary_opening(not_sea(sub), np.ones((2, 2))))
+        lab, _ = ndi.label(m)
+        h, w = m.shape
+        m = lab == lab[h // 2, w // 2]
+        out[name] = trim(cutout(rgb, slice(y0, y1), slice(x0, x1), m, pad=1))
+
+    # The bar splits into an empty track and a grey fill the game tints with
+    # each stat's colour, keeping the painted shading of image 08.
+    bar = np.array(out.pop("bar")).astype(np.float32)
+    rgbf, alpha = bar[..., :3], bar[..., 3]
+    fill = (rgbf[..., 0] > rgbf[..., 1] + 45) & (alpha > 200)
+    fill = ndi.binary_fill_holes(ndi.binary_closing(fill, np.ones((3, 3)), iterations=2))
+    lum = luminance(rgbf)
+    grey = np.clip(lum / np.percentile(lum[fill], 92), 0, 1) * 255
+    # The right of the bar held the numbers, so rebuild the fill from its clean
+    # left end: the left cap, its middle repeated, and the cap mirrored.
+    x0, x1 = np.nonzero(fill.any(0))[0][[0, -1]]
+    clean_cols = list(range(x0, x0 + 60))
+    middle = clean_cols[12:]
+    order = clean_cols[:12]
+    while len(order) < (x1 - x0 + 1) - 12:
+        order += middle if (len(order) // len(middle)) % 2 == 0 else middle[::-1]
+    order = order[: (x1 - x0 + 1) - 12] + clean_cols[:12][::-1]
+    for arr in (grey, alpha):
+        arr[:, x0 : x1 + 1] = arr[:, order]
+    fill[:, x0 : x1 + 1] = fill[:, order]
+    fill_rgba = np.dstack([grey, grey, grey, np.where(fill, alpha, 0)]).astype(np.uint8)
+    track = rgbf.copy()
+    track[fill] = np.array([42, 35, 27], np.float32) * (0.75 + 0.5 * (lum[fill, None] / 255))
+    out["bar_fill"] = Image.fromarray(fill_rgba, "RGBA")
+    out["bar_track"] = Image.fromarray(np.dstack([track, alpha]).astype(np.uint8), "RGBA")
+    rows, cols = np.nonzero(fill)
+    layout = {"barFill": [int(cols.min()), int(rows.min()), int(cols.max() + 1), int(rows.max() + 1)]}
+
+    out["minimap"] = clean_minimap(out["minimap"], clean)
+    return out, layout
+
+
+def clean_minimap(img: Image.Image, clean: np.ndarray) -> Image.Image:
+    """Swap the painted island inside the mock-up's map for plain parchment,
+    taken from the quest panel and matched to the map's aged colour, so the
+    game can draw the real island there. The torn border, the pins and the
+    north arrow stay."""
+    a = np.array(img).astype(np.float32)
+    h, w = a.shape[:2]
+    rng = np.random.default_rng(6)
+    edge = a[6:16, 20:-20, :3].reshape(-1, 3)
+    base = np.median(edge, 0) * 1.1
+    mottle = ndi.gaussian_filter(rng.random((h, w)), 9)
+    mottle = (mottle - mottle.mean()) / mottle.std()
+    grain = ndi.gaussian_filter(rng.random((h, w)), 0.7) - 0.5
+    paper = base * (1 + 0.05 * mottle[..., None] + 0.08 * grain[..., None])
+    inner = np.zeros((h, w), np.float32)
+    inner[16 : h - 14, 14 : w - 14] = 1
+    inner[10:60, w - 64 : w - 14] = 0  # keep the N and its arrow
+    inner = ndi.gaussian_filter(inner, 5)
+    a[..., :3] = a[..., :3] * (1 - inner[..., None]) + paper * inner[..., None]
+    return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), "RGBA")
 
 
 def pack(frames: dict[str, Image.Image], name: str, max_size: int = 2048, pad: int = 2) -> dict:
@@ -242,10 +413,18 @@ def main() -> None:
     os.makedirs(gen, exist_ok=True)
     with open(os.path.join(gen, "image06-rects.json"), "w") as f:
         json.dump(rects, f, indent=1)
+    rocks, rock_groups = cut_rocks()
+    world.update(rocks)
+    with open(os.path.join(gen, "rocks.json"), "w") as f:
+        json.dump(rock_groups, f, indent=1)
+    hud, hud_layout = cut_hud()
+    with open(os.path.join(gen, "hud-layout.json"), "w") as f:
+        json.dump(hud_layout, f, indent=1)
     pack(character, "character")
     pack(world, "world")
+    pack(hud, "hud")
     paint_textures.main(os.path.join(OUT, "textures"), REF)
-    for group, frames in (("character", character), ("world", world)):
+    for group, frames in (("character", character), ("world", world), ("hud", hud)):
         print(group)
         for k, v in frames.items():
             print(f"  {k:18s} {v.width}x{v.height}")

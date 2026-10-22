@@ -7,6 +7,7 @@ import { generateIsland, type IslandData } from '../world/islandGen';
 import { addTerrain } from '../world/terrainShader';
 
 const A = tuning.ambience;
+export type Wind = keyof typeof tuning.ambience.palms;
 /** Depths: flat ground layers sit far below anything sorted by its foot. */
 const DEPTH_TERRAIN = -2e6;
 const DEPTH_GROUND = -1e6;
@@ -16,6 +17,7 @@ export class IslandScene extends Phaser.Scene {
   private player!: Player;
   private keys!: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd', Phaser.Input.Keyboard.Key>;
   private fpsText?: Phaser.GameObjects.Text;
+  private palms: { sprite: Phaser.GameObjects.Sprite; sway: boolean }[] = [];
 
   constructor() {
     super('island');
@@ -74,11 +76,10 @@ export class IslandScene extends Phaser.Scene {
   }
 
   private placeObjects(): void {
-    const rng = new Rng(this.island.seed ^ 0xa11ce);
     this.anims.create({
       key: 'palm_sway',
       frames: this.anims.generateFrameNames('world', { prefix: 'palm_sway_', start: 0, end: 4 }),
-      frameRate: A.palmSwayFps,
+      frameRate: A.palms.windy.swayFps,
       repeat: -1,
       yoyo: true,
     });
@@ -86,22 +87,34 @@ export class IslandScene extends Phaser.Scene {
       if (o.kind === 'prop' && o.frame === 'campfire') continue;
       const s = this.add.sprite(o.x, o.y, 'world', o.frame).setOrigin(0.5, 1).setScale(o.scale).setFlipX(o.flip);
       s.setDepth(o.layer === 'ground' ? DEPTH_GROUND + 100 + o.y * 0.01 : o.y);
-      if (o.kind === 'palm') {
-        if (o.sway) {
-          s.play({ key: 'palm_sway', startFrame: rng.int(0, 4) });
-        } else {
-          s.setAngle(-A.palmRockDeg);
-          this.tweens.add({
-            targets: s,
-            angle: A.palmRockDeg,
-            duration: rng.range(1800, 2800),
-            delay: rng.range(0, 1500),
-            yoyo: true,
-            repeat: -1,
-            ease: 'Sine.easeInOut',
-          });
-        }
+      if (o.kind === 'palm') this.palms.push({ sprite: s, sway: !!o.sway });
+    }
+    this.setWind(A.startWind as Wind);
+  }
+
+  /** Palms move with the wind: a slow lean when calm, the sway loop when windy. */
+  setWind(wind: Wind): void {
+    const w = A.palms[wind];
+    const rng = new Rng(this.island.seed ^ 0xa11ce);
+    for (const { sprite, sway } of this.palms) {
+      this.tweens.killTweensOf(sprite);
+      if (sway && w.swayFps > 0) {
+        sprite.play({ key: 'palm_sway', frameRate: w.swayFps * rng.range(0.85, 1.15), startFrame: rng.int(0, 4) });
+      } else {
+        sprite.stop();
+        if (sway) sprite.setFrame('palm_sway_0');
       }
+      const period = w.leanSeconds * 1000 * rng.range(0.85, 1.15);
+      sprite.setAngle(-w.leanDeg);
+      this.tweens.add({
+        targets: sprite,
+        angle: w.leanDeg,
+        duration: period / 2,
+        delay: rng.range(0, period),
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
     }
   }
 

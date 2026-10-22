@@ -1,0 +1,15 @@
+{
+  "_comment": "The brief's first-days goal chain, shown one at a time in the goal panel. Goal tracking arrives in milestone 2.",
+  "goals": [
+    { "title": "Gather supplies", "task": "Gather 8 wood and 4 fiber", "target": 12 },
+    { "title": "Get out of the rain", "task": "Build a lean-to", "target": 1 },
+    { "title": "Go fishing", "task": "Craft a rod and catch a fish", "target": 2 },
+    { "title": "Cook your catch", "task": "Build, light and cook at a fire", "target": 3 },
+    { "title": "Beachcombing", "task": "Find the tarp and two bottles", "target": 3 },
+    { "title": "Fresh water", "task": "Build a rain catcher, fill a bottle", "target": 2 },
+    { "title": "Start a garden", "task": "Plant seeds in a farm plot", "target": 1 },
+    { "title": "Storm season", "task": "Upgrade to a palm hut", "target": 1 },
+    { "title": "Set sail", "task": "Build a raft, sail to the sandbar", "target": 2 },
+    { "title": "A message", "task": "Find a message in a bottle", "target": 1 }
+  ]
+}

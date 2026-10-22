@@ -1,0 +1,185 @@
+{
+ "rock_cluster": [
+  {
+   "frame": "rock_cluster_0",
+   "w": 246,
+   "h": 191
+  },
+  {
+   "frame": "rock_cluster_1",
+   "w": 250,
+   "h": 135
+  },
+  {
+   "frame": "rock_cluster_2",
+   "w": 240,
+   "h": 180
+  },
+  {
+   "frame": "rock_cluster_3",
+   "w": 184,
+   "h": 203
+  },
+  {
+   "frame": "rock_cluster_4",
+   "w": 184,
+   "h": 132
+  },
+  {
+   "frame": "rock_cluster_5",
+   "w": 181,
+   "h": 143
+  },
+  {
+   "frame": "rock_cluster_6",
+   "w": 182,
+   "h": 133
+  },
+  {
+   "frame": "rock_cluster_7",
+   "w": 180,
+   "h": 131
+  },
+  {
+   "frame": "rock_cluster_8",
+   "w": 155,
+   "h": 118
+  }
+ ],
+ "rock_medium": [
+  {
+   "frame": "rock_medium_0",
+   "w": 110,
+   "h": 86
+  },
+  {
+   "frame": "rock_medium_1",
+   "w": 89,
+   "h": 84
+  },
+  {
+   "frame": "rock_medium_2",
+   "w": 111,
+   "h": 84
+  },
+  {
+   "frame": "rock_medium_3",
+   "w": 136,
+   "h": 81
+  },
+  {
+   "frame": "rock_medium_4",
+   "w": 112,
+   "h": 95
+  },
+  {
+   "frame": "rock_medium_5",
+   "w": 109,
+   "h": 85
+  },
+  {
+   "frame": "rock_medium_6",
+   "w": 86,
+   "h": 57
+  }
+ ],
+ "rock_small": [
+  {
+   "frame": "rock_small_0",
+   "w": 78,
+   "h": 62
+  },
+  {
+   "frame": "rock_small_1",
+   "w": 86,
+   "h": 59
+  },
+  {
+   "frame": "rock_small_2",
+   "w": 99,
+   "h": 58
+  },
+  {
+   "frame": "rock_small_3",
+   "w": 80,
+   "h": 65
+  },
+  {
+   "frame": "rock_small_4",
+   "w": 91,
+   "h": 63
+  },
+  {
+   "frame": "rock_small_5",
+   "w": 78,
+   "h": 47
+  },
+  {
+   "frame": "rock_small_6",
+   "w": 94,
+   "h": 52
+  },
+  {
+   "frame": "rock_small_7",
+   "w": 113,
+   "h": 70
+  }
+ ],
+ "pebble": [
+  {
+   "frame": "pebble_0",
+   "w": 54,
+   "h": 40
+  },
+  {
+   "frame": "pebble_1",
+   "w": 71,
+   "h": 42
+  },
+  {
+   "frame": "pebble_2",
+   "w": 71,
+   "h": 42
+  },
+  {
+   "frame": "pebble_3",
+   "w": 68,
+   "h": 39
+  },
+  {
+   "frame": "pebble_4",
+   "w": 58,
+   "h": 40
+  },
+  {
+   "frame": "pebble_5",
+   "w": 50,
+   "h": 42
+  },
+  {
+   "frame": "pebble_6",
+   "w": 66,
+   "h": 44
+  },
+  {
+   "frame": "pebble_7",
+   "w": 60,
+   "h": 43
+  },
+  {
+   "frame": "pebble_8",
+   "w": 54,
+   "h": 34
+  },
+  {
+   "frame": "pebble_9",
+   "w": 52,
+   "h": 26
+  },
+  {
+   "frame": "pebble_10",
+   "w": 42,
+   "h": 29
+  }
+ ]
+}

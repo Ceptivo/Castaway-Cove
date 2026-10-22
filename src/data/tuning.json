@@ -53,10 +53,23 @@
     "palmSpacing": 120,
     "rocks": 25,
     "rockSpacing": 95,
+    "_rockMixComment": "Share of the rocks drawn from each size in image 10.",
+    "rockMix": { "rock_cluster": 0.25, "rock_medium": 0.4, "rock_small": 0.35 },
     "berryFerns": 35,
     "fernSpacing": 75,
-    "pebbles": 140,
+    "pebbles": 80,
+    "pebbleScaleMin": 0.45,
+    "pebbleScaleMax": 0.75,
     "starfish": 12
+  },
+
+  "stats": {
+    "_comment": "Starting values from the brief. The stats system (milestone 2) drains and refills them.",
+    "health": 100,
+    "food": 100,
+    "water": 100,
+    "startingCoins": 0,
+    "playerName": "Luke"
   },
 
   "player": {
@@ -79,8 +92,13 @@
     "waterDriftX": 6,
     "waterDriftY": 3,
     "foamBreathSeconds": 3.2,
-    "palmSwayFps": 3,
-    "palmRockDeg": 1.2,
+    "_windComment": "Palms by wind strength. Calm days only lean gently; the frame-by-frame sway from image 04 is for wind. The weather system (milestone 2) changes the wind; until then it stays at startWind.",
+    "startWind": "calm",
+    "palms": {
+      "calm": { "swayFps": 0, "leanDeg": 0.35, "leanSeconds": 6 },
+      "breezy": { "swayFps": 1.2, "leanDeg": 0.8, "leanSeconds": 4 },
+      "windy": { "swayFps": 3, "leanDeg": 1.6, "leanSeconds": 2.2 }
+    },
     "fireFlickerMs": 140
   }
 }
